@@ -1,18 +1,18 @@
-const ParentStudent = require('../../model/ParentStudent');
-const Student = require('../../model/Student');
-const Timetable = require('../../model/Timetable');
-const Notice = require('../../model/Notice');
-const FeeCollection = require('../../model/FeeCollection');
-const Assignment = require('../../model/Assignment');
-const Attendance = require('../../model/Attendance');
-const BookIssue = require('../../model/BookIssue');
-const LiveClass = require('../../model/LiveClass');
-const VideoClass = require('../../model/VideoClass');
-const Diary = require('../../model/Diary');
-const HostelAllocation = require('../../model/HostelAllocation');
-const HostelMenu = require('../../model/HostelMenu');
-const HostelService = require('../../model/HostelService');
-const CheckInOut = require('../../model/CheckInOut');
+const ParentStudent = require('../model/ParentStudent');
+const Student = require('../model/Student');
+const Timetable = require('../model/Timetable');
+const Notice = require('../model/Notice');
+const FeeCollection = require('../model/FeeCollection');
+const Assignment = require('../model/Assignment');
+const Attendance = require('../model/Attendance');
+const BookIssue = require('../model/BookIssue');
+const LiveClass = require('../model/LiveClass');
+const VideoClass = require('../model/VideoClass');
+const Diary = require('../model/Diary');
+const HostelAllocation = require('../model/HostelAllocation');
+const HostelMenu = require('../model/HostelMenu');
+const HostelService = require('../model/HostelService');
+const CheckInOut = require('../model/CheckInOut');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
@@ -475,7 +475,7 @@ exports.createUser = async (req, res) => {
     const { firstName, lastName, mobile, password, role, studentId, rollNumber, class: cls, section, children, wardenId } = req.body;
     if (!firstName || !mobile || !password || !role) return res.status(400).json({ message: 'firstName, mobile, password and role are required' });
 
-    const Admin = require('../../model/Admin');
+    const Admin = require('../model/Admin');
     const admin = await Admin.findById(req.userId).lean();
     if (!admin) return res.status(403).json({ message: 'Access denied' });
 
@@ -503,7 +503,7 @@ exports.createUser = async (req, res) => {
 
 exports.getAllUsers = async (req, res) => {
   try {
-    const Admin = require('../../model/Admin');
+    const Admin = require('../model/Admin');
     const admin = await Admin.findById(req.userId).lean();
     if (!admin) return res.status(403).json({ message: 'Access denied' });
 
