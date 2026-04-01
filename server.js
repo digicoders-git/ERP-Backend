@@ -1,3 +1,4 @@
+require('dns').setDefaultResultOrder('ipv4first');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -58,6 +59,7 @@ const feeAdminRoutes = require('./router/fee/feeAdminRoutes');
 const feeDashboardRoutes = require('./router/fee/feeDashboardRoutes');
 const feeReportsRoutes = require('./router/fee/feeReportsRoutes');
 const feeExtrasRoutes = require('./router/fee/feeExtrasRoutes');
+const paymentGatewayRoutes = require('./router/fee/paymentGatewayRoutes');
 
 // Warden Panel Routes
 const hostelMenuRoutes = require('./router/warden/hostelMenuRoutes');
@@ -78,6 +80,7 @@ const wardenReportsRoutes = require('./router/warden/reportsRoutes');
 const wardenAuthRoutes = require('./router/warden/wardenAuthRoutes');
 const messManagementRoutes = require('./router/warden/messManagementRoutes');
 const hostelStudentRoutes = require('./router/warden/hostelStudentRoutes');
+const wardenOptimizedRoutes = require('./router/warden/wardenOptimizedRoutes');
 
 // Library Panel Routes
 const libraryAdminRoutes = require('./router/library/libraryAdminRoutes');
@@ -91,6 +94,7 @@ const libraryCardRoutes = require('./router/library/libraryCardRoutes');
 const bookLimitRoutes = require('./router/library/bookLimitRoutes');
 const digitalLibraryRoutes = require('./router/library/digitalLibraryRoutes');
 const libraryAuthRoutes = require('./router/library/libraryAuthRoutes');
+const barcodeFineRoutes = require('./router/library/barcodeFineRoutes');
 const libraryReportsRoutes = require('./router/library/libraryReportsRoutes');
 
 // Teacher Panel Routes
@@ -178,6 +182,7 @@ app.use('/api/fee-panel/fee-admin', feeAdminRoutes);
 app.use('/api/fee-panel/dashboard', feeDashboardRoutes);
 app.use('/api/fee-panel/reports', feeReportsRoutes);
 app.use('/api/fee-panel/extras', feeExtrasRoutes);
+app.use('/api/fee-panel/payment', paymentGatewayRoutes);
 
 // Warden Panel APIs
 app.use('/api/warden-panel/hostel-menu', hostelMenuRoutes);
@@ -197,6 +202,7 @@ app.use('/api/warden-panel/analytics', wardenAnalyticsRoutes);
 app.use('/api/warden-panel/reports', wardenReportsRoutes);
 app.use('/api/warden-panel/mess', messManagementRoutes);
 app.use('/api/warden-panel/students', hostelStudentRoutes);
+app.use('/api/warden-panel/optimized', wardenOptimizedRoutes);
 app.use('/api/warden-auth', wardenAuthRoutes);
 
 // Library Panel APIs
@@ -212,6 +218,7 @@ app.use('/api/library-panel/book-limit', bookLimitRoutes);
 app.use('/api/library-panel/digital-library', digitalLibraryRoutes);
 app.use('/api/library-panel/auth', libraryAuthRoutes);
 app.use('/api/library-panel/reports', libraryReportsRoutes);
+app.use('/api/library-panel/barcode-fine', barcodeFineRoutes);
 
 // Teacher Panel APIs
 app.use('/api/teacher-panel/timetable', timetableRoutes);
@@ -272,10 +279,12 @@ const driverPanelRoutes = require('./router/transport/driverPanelRoutes');
 const vehicleChecklistRoutes = require('./router/transport/vehicleChecklistRoutes');
 const driverComplaintRoutes = require('./router/transport/driverComplaintRoutes');
 const salaryDocumentsRoutes = require('./router/transport/salaryDocumentsRoutes');
+const gpsTrackingRoutes = require('./router/transport/gpsTrackingRoutes');
 app.use('/api/transport-panel/driver', driverPanelRoutes);
 app.use('/api/transport-panel/checklist', vehicleChecklistRoutes);
 app.use('/api/transport-panel/complaints', driverComplaintRoutes);
 app.use('/api/transport-panel/salary-docs', salaryDocumentsRoutes);
+app.use('/api/transport-panel/gps', gpsTrackingRoutes);
 
 // Reports APIs
 const reportsRoutes = require('./router/reportsRoutes');

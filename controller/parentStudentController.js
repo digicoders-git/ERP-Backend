@@ -499,6 +499,457 @@ exports.createUser = async (req, res) => {
   }
 };
 
+// ─── ATTENDANCE HISTORY WITH ANALYTICS ────────────────────────────────────────
+
+exports.getAttendanceHistory = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const studentId = req.query.studentId || user.studentId;
+    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+
+    const { startDate, endDate, month } = req.query;
+    const sid = new mongoose.Types.ObjectId(studentId);
+
+    // Date range
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    } else if (month) {
+      const [year, monthNum] = month.split('-');
+      const start = new Date(year, monthNum - 1, 1);
+      const end = new Date(year, monthNum, 0);
+      dateFilter = { $gte: start, $lte: end };
+    } else {
+      // Last 30 days
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      dateFilter = { $gte: start };
+    }
+
+    const [records, stats] = await Promise.all([
+      Attendance.find({ studentId: sid, type: 'student', date: dateFilter })
+        .sort({ date: -1 })
+        .select('date status remarks')
+        .lean(),
+      Attendance.aggregate([
+        { $match: { studentId: sid, type: 'student', date: dateFilter } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const statusMap = {};
+    stats.forEach(s => { statusMap[s._id] = s.count; });
+    const total = stats.reduce((sum, s) => sum + s.count, 0);
+    const present = statusMap.present || 0;
+    const absent = statusMap.absent || 0;
+    const late = statusMap.late || 0;
+    const attendancePercentage = total > 0 ? Math.round((present / total) * 100) : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        records: records.map(r => ({
+          date: r.date.toISOString().split('T')[0],
+          status: r.status,
+          remarks: r.remarks || ''
+        })),
+        analytics: {
+          totalDays: total,
+          present,
+          absent,
+          late,
+          attendancePercentage,
+          status: attendancePercentage >= 75 ? 'Good' : attendancePercentage >= 60 ? 'Average' : 'Poor'
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── EXAM RESULTS & PERFORMANCE ───────────────────────────────────────────────
+
+exports.getExamResults = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const studentId = req.query.studentId || user.studentId;
+    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+
+    const ExamSchedule = require('../model/ExamSchedule');
+    const sid = new mongoose.Types.ObjectId(studentId);
+
+    const student = await Student.findById(studentId).select('class section').lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    // Get exams with results
+    const exams = await ExamSchedule.find({
+      branch: user.branch,
+      class: student.class,
+      section: student.section,
+      'results.studentId': sid
+    })
+      .sort({ examDate: -1 })
+      .select('examName subject examDate totalMarks results')
+      .lean();
+
+    const results = exams.map(exam => {
+      const studentResult = exam.results?.find(r => r.studentId?.toString() === studentId);
+      return {
+        examId: exam._id,
+        examName: exam.examName,
+        subject: exam.subject,
+        examDate: exam.examDate,
+        totalMarks: exam.totalMarks,
+        obtainedMarks: studentResult?.marksObtained || 0,
+        grade: studentResult?.grade || 'N/A',
+        percentage: exam.totalMarks > 0 ? Math.round((studentResult?.marksObtained || 0) / exam.totalMarks * 100) : 0,
+        remarks: studentResult?.remarks || ''
+      };
+    });
+
+    // Calculate overall performance
+    const totalExams = results.length;
+    const avgPercentage = totalExams > 0 
+      ? Math.round(results.reduce((sum, r) => sum + r.percentage, 0) / totalExams) 
+      : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        results,
+        performance: {
+          totalExams,
+          averagePercentage: avgPercentage,
+          status: avgPercentage >= 75 ? 'Excellent' : avgPercentage >= 60 ? 'Good' : avgPercentage >= 40 ? 'Average' : 'Needs Improvement'
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── TRANSPORT TRACKING ───────────────────────────────────────────────────────
+
+exports.getTransportInfo = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const studentId = req.query.studentId || user.studentId;
+    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+
+    const TransportAllocation = require('../model/TransportAllocation');
+    const Route = require('../model/Route');
+    const Vehicle = require('../model/Vehicle');
+    const Driver = require('../model/Driver');
+
+    const allocation = await TransportAllocation.findOne({ 
+      studentId: studentId.toString(), 
+      status: 'active' 
+    }).lean();
+
+    if (!allocation) {
+      return res.status(200).json({ 
+        success: true, 
+        data: { allocated: false, message: 'No transport allocated' } 
+      });
+    }
+
+    const [route, vehicle, driver] = await Promise.all([
+      Route.findById(allocation.routeId).lean(),
+      Vehicle.findById(allocation.vehicleId).lean(),
+      Driver.findById(allocation.driverId).lean()
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        allocated: true,
+        route: {
+          name: route?.routeName || 'N/A',
+          pickupPoint: allocation.pickupPoint || 'N/A',
+          dropPoint: allocation.dropPoint || 'N/A',
+          pickupTime: allocation.pickupTime || 'N/A',
+          dropTime: allocation.dropTime || 'N/A'
+        },
+        vehicle: {
+          number: vehicle?.vehicleNumber || 'N/A',
+          type: vehicle?.vehicleType || 'N/A',
+          capacity: vehicle?.capacity || 0
+        },
+        driver: {
+          name: driver?.name || 'N/A',
+          mobile: driver?.mobile || 'N/A',
+          licenseNumber: driver?.licenseNumber || 'N/A'
+        },
+        fee: allocation.monthlyFee || 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── COMMUNICATION WITH TEACHERS ──────────────────────────────────────────────
+
+exports.sendMessageToTeacher = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { teacherId, subject, message, studentId } = req.body;
+    if (!teacherId || !subject || !message) {
+      return res.status(400).json({ message: 'teacherId, subject and message are required' });
+    }
+
+    const Communication = require('../model/Notification');
+    
+    const comm = new Communication({
+      recipientId: teacherId,
+      recipientType: 'teacher',
+      senderId: user._id,
+      senderType: user.role,
+      studentId: studentId || user.studentId,
+      subject,
+      message,
+      type: 'message',
+      status: 'unread',
+      branch: user.branch,
+      client: user.client,
+      createdAt: new Date()
+    });
+
+    await comm.save();
+    res.status(201).json({ success: true, message: 'Message sent successfully', data: comm });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.getMessages = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const Notification = require('../model/Notification');
+    
+    const messages = await Notification.find({
+      $or: [
+        { recipientId: user._id },
+        { senderId: user._id }
+      ],
+      type: 'message'
+    })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.status(200).json({ success: true, data: messages });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── PAYMENT INITIATION ───────────────────────────────────────────────────────
+
+exports.initiateFeePayment = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { feeCollectionId, amount, paymentMethod } = req.body;
+    if (!feeCollectionId || !amount) {
+      return res.status(400).json({ message: 'feeCollectionId and amount are required' });
+    }
+
+    const feeRecord = await FeeCollection.findById(feeCollectionId);
+    if (!feeRecord) return res.status(404).json({ message: 'Fee record not found' });
+
+    // Create payment intent (placeholder for payment gateway integration)
+    const paymentIntent = {
+      id: `pi_${Date.now()}`,
+      amount: amount * 100, // Convert to paise
+      currency: 'INR',
+      status: 'pending',
+      feeCollectionId,
+      studentId: feeRecord.student,
+      paymentMethod: paymentMethod || 'online',
+      createdAt: new Date()
+    };
+
+    // In production, integrate with Razorpay/Stripe/PayU
+    // const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY, key_secret: process.env.RAZORPAY_SECRET });
+    // const order = await razorpay.orders.create({ amount: amount * 100, currency: 'INR', receipt: feeCollectionId });
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment initiated',
+      data: {
+        paymentIntent,
+        // In production, return payment gateway order details
+        // orderId: order.id,
+        // key: process.env.RAZORPAY_KEY,
+        redirectUrl: `/payment/confirm?intent=${paymentIntent.id}`
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.confirmPayment = async (req, res) => {
+  try {
+    const { paymentIntentId, paymentId, signature } = req.body;
+    if (!paymentIntentId) return res.status(400).json({ message: 'paymentIntentId required' });
+
+    // Verify payment signature (Razorpay example)
+    // const crypto = require('crypto');
+    // const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_SECRET)
+    //   .update(orderId + '|' + paymentId).digest('hex');
+    // if (expectedSignature !== signature) return res.status(400).json({ message: 'Invalid signature' });
+
+    // Update fee collection record
+    // const feeRecord = await FeeCollection.findById(feeCollectionId);
+    // feeRecord.amountPaid += amount;
+    // feeRecord.balance -= amount;
+    // feeRecord.status = feeRecord.balance === 0 ? 'paid' : 'partial';
+    // feeRecord.paymentDate = new Date();
+    // feeRecord.paymentMode = 'online';
+    // feeRecord.transactionId = paymentId;
+    // await feeRecord.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment confirmed successfully',
+      data: { paymentIntentId, status: 'success' }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── STUDENT PROFILE ──────────────────────────────────────────────────────────
+
+exports.getStudentProfile = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const studentId = req.query.studentId || user.studentId;
+    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+
+    const student = await Student.findById(studentId)
+      .populate('class', 'className')
+      .populate('section', 'sectionName')
+      .populate('branch', 'branchName')
+      .lean();
+
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        personalInfo: {
+          name: `${student.firstName} ${student.lastName}`,
+          rollNumber: student.rollNumber,
+          admissionNumber: student.admissionNumber,
+          dateOfBirth: student.dateOfBirth,
+          gender: student.gender,
+          bloodGroup: student.bloodGroup,
+          email: student.email,
+          mobile: student.mobile,
+          profileImage: student.profileImage
+        },
+        academicInfo: {
+          class: student.class?.className || 'N/A',
+          section: student.section?.sectionName || 'N/A',
+          branch: student.branch?.branchName || 'N/A',
+          admissionDate: student.admissionDate,
+          status: student.status
+        },
+        parentInfo: {
+          fatherName: student.fatherName,
+          fatherMobile: student.fatherMobile,
+          motherName: student.motherName,
+          motherMobile: student.motherMobile,
+          guardianName: student.guardianName,
+          guardianMobile: student.guardianMobile
+        },
+        address: {
+          currentAddress: student.currentAddress,
+          permanentAddress: student.permanentAddress,
+          city: student.city,
+          state: student.state,
+          pincode: student.pincode
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── LEAVE APPLICATION ────────────────────────────────────────────────────────
+
+exports.applyLeave = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { studentId, leaveType, startDate, endDate, reason } = req.body;
+    if (!leaveType || !startDate || !endDate || !reason) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    const Leave = require('../model/Leave');
+    const sid = studentId || user.studentId;
+
+    const leave = new Leave({
+      studentId: sid,
+      leaveType,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      reason,
+      status: 'pending',
+      appliedBy: user._id,
+      branch: user.branch,
+      client: user.client,
+      createdAt: new Date()
+    });
+
+    await leave.save();
+    res.status(201).json({ success: true, message: 'Leave application submitted', data: leave });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.getLeaveHistory = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const studentId = req.query.studentId || user.studentId;
+    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+
+    const Leave = require('../model/Leave');
+    
+    const leaves = await Leave.find({ studentId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: leaves });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // ─── ADMIN: GET ALL USERS ─────────────────────────────────────────────────────
 
 exports.getAllUsers = async (req, res) => {

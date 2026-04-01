@@ -20,6 +20,18 @@ router.get('/recorded-classes', psAuth, ctrl.getRecordedClasses);
 router.get('/ediary', psAuth, ctrl.getEDiary);
 router.put('/change-password', psAuth, ctrl.changePassword);
 
+// New APIs
+router.get('/attendance-history', psAuth, ctrl.getAttendanceHistory);
+router.get('/exam-results', psAuth, ctrl.getExamResults);
+router.get('/transport-info', psAuth, ctrl.getTransportInfo);
+router.get('/profile', psAuth, ctrl.getStudentProfile);
+router.post('/message/send', psAuth, ctrl.sendMessageToTeacher);
+router.get('/messages', psAuth, ctrl.getMessages);
+router.post('/payment/initiate', psAuth, ctrl.initiateFeePayment);
+router.post('/payment/confirm', psAuth, ctrl.confirmPayment);
+router.post('/leave/apply', psAuth, ctrl.applyLeave);
+router.get('/leave/history', psAuth, ctrl.getLeaveHistory);
+
 // Warden only
 router.get('/warden/services', psAuth, ctrl.getWardenServices);
 router.post('/warden/services', psAuth, ctrl.recordWardenService);
