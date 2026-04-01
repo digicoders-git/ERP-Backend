@@ -1,0 +1,5086 @@
+{
+  "info": {
+    "name": "ERP School API Collection",
+    "description": "Complete Postman collection for ERP School Backend with 748+ APIs organized panel-wise. Includes: Super Admin, School Admin, Branch Admin, Staff Panel, Teacher Panel, Fee Panel, Warden Panel, Library Panel, Transport Panel, Parent/Student Panel, and Reports APIs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Super Admin Panel",
+      "description": "Super Admin authentication and management APIs",
+      "item": [
+        {
+          "name": "Authentication",
+          "item": [
+            {
+              "name": "POST /admin/create - Create Super Admin",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Super Admin\",\n  \"email\": \"admin@school.com\",\n  \"password\": \"admin123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "create"]
+                }
+              }
+            },
+            {
+              "name": "POST /admin/login - Login Admin",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"admin@school.com\",\n  \"password\": \"admin123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "login"]
+                }
+              }
+            },
+            {
+              "name": "PUT /admin/update-password - Update Password",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"currentPassword\": \"admin123\",\n  \"newPassword\": \"newpassword123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/update-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "update-password"]
+                }
+              }
+            },
+            {
+              "name": "PATCH /admin/toggle-status/:adminId - Toggle Admin Status",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/toggle-status/:adminId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "toggle-status", ":adminId"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin/dashboard-stats - Get Dashboard Stats",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/dashboard-stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "dashboard-stats"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Client/School Admin Panel",
+      "description": "Client management and school administration APIs",
+      "item": [
+        {
+          "name": "Client Authentication",
+          "item": [
+            {
+              "name": "POST /client/register - Register Client",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"School Name\",\n  \"email\": \"school@email.com\",\n  \"password\": \"password123\",\n  \"phone\": \"9876543210\",\n  \"address\": \"School Address\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/client/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "register"]
+                }
+              }
+            },
+            {
+              "name": "POST /client/login - Login Client",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"school@email.com\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/client/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "login"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client Management",
+          "item": [
+            {
+              "name": "GET /client/all - Get All Clients",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /client/:id - Get Client by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /client/:id - Update Client",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated School Name\",\n  \"phone\": \"9876543210\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/client/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /client/:id - Delete Client",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /client/profile - Get Client Profile",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "profile"]
+                }
+              }
+            },
+            {
+              "name": "PUT /client/update-password - Update Password",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newpassword123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/client/update-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "update-password"]
+                }
+              }
+            },
+            {
+              "name": "POST /client/change-branch-password - Change Branch Password",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"branchId\": \"branch_id\",\n  \"newPassword\": \"branchpassword123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/client/change-branch-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "change-branch-password"]
+                }
+              }
+            },
+            {
+              "name": "GET /client/branches - Get All Branches",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/branches",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "branches"]
+                }
+              }
+            },
+            {
+              "name": "GET /client/dashboard - Get Dashboard",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/dashboard",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "dashboard"]
+                }
+              }
+            },
+            {
+              "name": "GET /client/branch/:id - Get Branch by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/client/branch/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["client", "branch", ":id"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Branch Management",
+      "description": "Branch creation and management APIs",
+      "item": [
+        {
+          "name": "Branch CRUD",
+          "item": [
+            {
+              "name": "POST /branch/create - Create Branch",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Branch Name\",\n  \"address\": \"Branch Address\",\n  \"phone\": \"9876543210\",\n  \"email\": \"branch@school.com\",\n  \"password\": \"branchpass123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/branch/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "create"]
+                }
+              }
+            },
+            {
+              "name": "GET /branch/all - Get All Branches",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /branch/:id - Get Branch by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /branch/:id - Update Branch",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Branch Name\",\n  \"address\": \"Updated Address\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/branch/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /branch/:id - Delete Branch",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /branch/profile - Get Branch Profile",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "profile"]
+                }
+              }
+            },
+            {
+              "name": "PUT /branch/update-password - Update Password",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"currentPassword\": \"oldpass\",\n  \"newPassword\": \"newpass123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/branch/update-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "update-password"]
+                }
+              }
+            },
+            {
+              "name": "GET /branch/dashboard - Get Dashboard",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/dashboard",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "dashboard"]
+                }
+              }
+            },
+            {
+              "name": "GET /branch/stats - Get Statistics",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "stats"]
+                }
+              }
+            },
+            {
+              "name": "PATCH /branch/toggle-status/:id - Toggle Branch Status",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/toggle-status/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "toggle-status", ":id"]
+                }
+              }
+            },
+            {
+              "name": "POST /branch/create-branch-admin - Create Branch Admin",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Branch Admin\",\n  \"email\": \"branchadmin@school.com\",\n  \"password\": \"admin123\",\n  \"phone\": \"9876543210\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/branch/create-branch-admin",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "create-branch-admin"]
+                }
+              }
+            },
+            {
+              "name": "GET /branch/admins - Get All Branch Admins",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/branch/admins",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["branch", "admins"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Staff Panel",
+      "description": "Staff panel APIs for admission, students, exams, and more",
+      "item": [
+        {
+          "name": "4.1 Admission Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/admission/add - Add Admission",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {"key": "firstName", "value": "John", "type": "text"},
+                    {"key": "lastName", "value": "Doe", "type": "text"},
+                    {"key": "email", "value": "john@email.com", "type": "text"},
+                    {"key": "phone", "value": "9876543210", "type": "text"},
+                    {"key": "classId", "value": "class_id", "type": "text"},
+                    {"key": "fatherName", "value": "Mr. Father", "type": "text"},
+                    {"key": "motherName", "value": "Mrs. Mother", "type": "text"},
+                    {"key": "address", "value": "Student Address", "type": "text"},
+                    {"key": "profileImage", "type": "file"},
+                    {"key": "marksheet", "type": "file"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/admission/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "admission", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/admission/all - Get All Admissions",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/admission/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "admission", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/admission/:id - Get Admission by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/admission/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "admission", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Student Management",
+          "item": [
+            {
+              "name": "GET /staff-panel/student/profile/:id - Get Student Profile",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/profile/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "profile", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/student/applications - Get All Applications",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/applications",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "applications"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/student/verification-list - Get Verification List",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/verification-list",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "verification-list"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/student/verify/:id - Verify Student",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"verified\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/verify/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "verify", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/student/enrollment-list - Get Enrollment List",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/enrollment-list",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "enrollment-list"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/student/enroll/:id - Enroll Student",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"enrollmentNumber\": \"ENR123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/enroll/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "enroll", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/student/documents/:id - Upload Documents",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {"key": "marksheet", "type": "file"},
+                    {"key": "characterCertificate", "type": "file"},
+                    {"key": "transferCertificate", "type": "file"},
+                    {"key": "birthCertificate", "type": "file"},
+                    {"key": "aadharCard", "type": "file"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/documents/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "documents", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/student/documents - Get All Documents",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/student/documents",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "student", "documents"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Notice Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/notice/add - Add Notice",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Notice Title\",\n  \"description\": \"Notice Description\",\n  \"date\": \"2024-01-15\",\n  \"forClass\": \"class_id\",\n  \"forTeacher\": false,\n  \"forStudent\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notice/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notice", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/notice/all - Get All Notices",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notice/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notice", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/notice/:id - Get Notice by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notice/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notice", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/notice/:id - Update Notice",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Updated Notice Title\",\n  \"description\": \"Updated Description\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notice/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notice", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/notice/:id - Delete Notice",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notice/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notice", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Exam Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/exam/add - Add Exam",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"examName\": \"Mid Term Exam\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"date\": \"2024-02-15\",\n  \"duration\": \"3 hours\",\n  \"totalMarks\": 100\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/exam/all - Get All Exams",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/exam/:id - Get Exam by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/exam/:id - Update Exam",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"examName\": \"Updated Exam Name\",\n  \"date\": \"2024-02-20\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/exam/:id - Delete Exam",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/exam/class/:classId - Get Exams by Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam/class/:classId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam", "class", ":classId"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 Exam Schedule Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/exam-schedule/add - Add Exam Schedule",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"examId\": \"exam_id\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"date\": \"2024-02-15\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"12:00\",\n  \"room\": \"Room 101\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam-schedule/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam-schedule", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/exam-schedule/all - Get All Exam Schedules",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam-schedule/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam-schedule", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/exam-schedule/:id - Get Exam Schedule by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam-schedule/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam-schedule", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/exam-schedule/:id - Update Exam Schedule",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"room\": \"Room 202\",\n  \"startTime\": \"10:00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam-schedule/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam-schedule", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/exam-schedule/:id - Delete Exam Schedule",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/exam-schedule/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "exam-schedule", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.6 Fee Collection",
+          "item": [
+            {
+              "name": "POST /staff-panel/fee-collection/add - Add Fee Collection",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"classId\": \"class_id\",\n  \"amount\": 5000,\n  \"feeType\": \"Tuition Fee\",\n  \"paymentMode\": \"Cash\",\n  \"date\": \"2024-01-15\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/fee-collection/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "fee-collection", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/fee-collection/all - Get All Fee Collections",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/fee-collection/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "fee-collection", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/fee-collection/:id - Get Fee Collection by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/fee-collection/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "fee-collection", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/fee-collection/student/:studentId - Get Student Fee Collections",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/fee-collection/student/:studentId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "fee-collection", "student", ":studentId"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/fee-collection/:id - Update Fee Collection",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 5500,\n  \"remarks\": \"Updated amount\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/fee-collection/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "fee-collection", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/fee-collection/:id - Delete Fee Collection",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/fee-collection/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "fee-collection", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.7 Class Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/class/add - Add Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Class 10\",\n  \"section\": \"A\",\n  \"classTeacher\": \"teacher_id\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/class/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "class", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/class/all - Get All Classes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/class/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "class", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/class/:id - Get Class by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/class/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "class", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/class/:id - Update Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Class 10\",\n  \"section\": \"B\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/class/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "class", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/class/:id - Delete Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/class/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "class", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.8 Dashboard",
+          "item": [
+            {
+              "name": "GET /staff-panel/dashboard/stats - Get Dashboard Stats",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/dashboard/stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "dashboard", "stats"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.9 ID Card Generation",
+          "item": [
+            {
+              "name": "POST /staff-panel/id-card/generate - Generate ID Card",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"type\": \"student\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/id-card/generate",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "id-card", "generate"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/id-card/all - Get All ID Cards",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/id-card/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "id-card", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/id-card/:id - Get ID Card by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/id-card/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "id-card", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.10 Reports",
+          "item": [
+            {
+              "name": "GET /staff-panel/report/students - Get Student Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/report/students",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "report", "students"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/report/attendance - Get Attendance Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/report/attendance",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "report", "attendance"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/report/fees - Get Fee Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/report/fees",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "report", "fees"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.11 E-Learning",
+          "item": [
+            {
+              "name": "POST /staff-panel/e-learning/add - Add E-Learning Content",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Math Lecture 1\",\n  \"description\": \"Basic Mathematics\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"videoUrl\": \"https://video.url\",\n  \"type\": \"video\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/e-learning/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "e-learning", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/e-learning/all - Get All E-Learning Content",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/e-learning/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "e-learning", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/e-learning/:id - Get E-Learning by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/e-learning/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "e-learning", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/e-learning/:id - Update E-Learning Content",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Updated Lecture Title\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/e-learning/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "e-learning", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/e-learning/:id - Delete E-Learning Content",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/e-learning/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "e-learning", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.12 Staff Profile",
+          "item": [
+            {
+              "name": "GET /staff-panel/profile - Get Profile",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "profile"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/profile - Update Profile",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"9876543210\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "profile"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.13 Hostel Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/hostel/add - Add Hostel",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Boys Hostel A\",\n  \"type\": \"boys\",\n  \"capacity\": 100,\n  \"warden\": \"warden_id\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/hostel/all - Get All Hostels",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/hostel/:id - Get Hostel by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/hostel/:id - Update Hostel",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Hostel Name\",\n  \"capacity\": 120\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/hostel/:id - Delete Hostel",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/hostel/rooms - Get Hostel Rooms",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/rooms",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", "rooms"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/hostel/students - Get Hostel Students",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/hostel/students",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "hostel", "students"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.14 Transport Management",
+          "item": [
+            {
+              "name": "GET /staff-panel/transport/vehicles - Get Vehicles",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/vehicles",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "vehicles"]
+                }
+              }
+            },
+            {
+              "name": "POST /staff-panel/transport/vehicle/add - Add Vehicle",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"vehicleNumber\": \"UP32AB1234\",\n  \"model\": \"School Bus\",\n  \"capacity\": 40,\n  \"driver\": \"driver_id\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/vehicle/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "vehicle", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/transport/routes - Get Routes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/routes",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "routes"]
+                }
+              }
+            },
+            {
+              "name": "POST /staff-panel/transport/route/add - Add Route",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"routeName\": \"Route A\",\n  \"stops\": [\"Stop 1\", \"Stop 2\"],\n  \"charges\": 500\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/route/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "route", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/transport/drivers - Get Drivers",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/drivers",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "drivers"]
+                }
+              }
+            },
+            {
+              "name": "POST /staff-panel/transport/driver/add - Add Driver",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Driver Name\",\n  \"phone\": \"9876543210\",\n  \"licenseNumber\": \"DL123456\",\n  \"address\": \"Driver Address\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/driver/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "driver", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/transport/allocations - Get Allocations",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/allocations",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "allocations"]
+                }
+              }
+            },
+            {
+              "name": "POST /staff-panel/transport/allocation/add - Add Allocation",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"vehicleId\": \"vehicle_id\",\n  \"routeId\": \"route_id\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/transport/allocation/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "transport", "allocation", "add"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.15 Librarian Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/librarian/add - Add Librarian",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Librarian Name\",\n  \"email\": \"librarian@school.com\",\n  \"phone\": \"9876543210\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/librarian/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "librarian", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/librarian/all - Get All Librarians",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/librarian/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "librarian", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/librarian/:id - Get Librarian by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/librarian/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "librarian", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/librarian/:id - Update Librarian",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"9876543210\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/librarian/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "librarian", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/librarian/:id - Delete Librarian",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/librarian/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "librarian", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.16 Teacher Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/teacher-management/add - Add Teacher",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Teacher Name\",\n  \"email\": \"teacher@school.com\",\n  \"phone\": \"9876543210\",\n  \"subject\": \"Mathematics\",\n  \"qualification\": \"M.Sc\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-management/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-management", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/teacher-management/all - Get All Teachers",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-management/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-management", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/teacher-management/:id - Get Teacher by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-management/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-management", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/teacher-management/:id - Update Teacher",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated Teacher Name\",\n  \"subject\": \"Physics\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-management/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-management", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/teacher-management/:id - Delete Teacher",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-management/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-management", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.17 Salary Management",
+          "item": [
+            {
+              "name": "POST /staff-panel/salary/add - Add Salary",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"staffId\": \"staff_id\",\n  \"basicSalary\": 30000,\n  \"allowances\": 5000,\n  \"deductions\": 1000,\n  \"month\": \"January\",\n  \"year\": 2024\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/salary/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "salary", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/salary/all - Get All Salaries",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/salary/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "salary", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/salary/:id - Get Salary by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/salary/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "salary", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/salary/staff/:staffId - Get Staff Salary",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/salary/staff/:staffId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "salary", "staff", ":staffId"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/salary/:id - Update Salary",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"basicSalary\": 35000\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/salary/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "salary", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/salary/:id - Delete Salary",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/salary/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "salary", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.18 Performance Evaluation",
+          "item": [
+            {
+              "name": "POST /staff-panel/performance-evaluation/add - Add Evaluation",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"staffId\": \"staff_id\",\n  \"rating\": 4,\n  \"comments\": \"Good performance\",\n  \"date\": \"2024-01-15\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/performance-evaluation/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "performance-evaluation", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/performance-evaluation/all - Get All Evaluations",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/performance-evaluation/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "performance-evaluation", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/performance-evaluation/:id - Get Evaluation by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/performance-evaluation/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "performance-evaluation", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/performance-evaluation/staff/:staffId - Get Staff Evaluations",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/performance-evaluation/staff/:staffId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "performance-evaluation", "staff", ":staffId"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.19 Teacher Attendance",
+          "item": [
+            {
+              "name": "POST /staff-panel/teacher-attendance/mark - Mark Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"teacherId\": \"teacher_id\",\n  \"date\": \"2024-01-15\",\n  \"status\": \"present\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-attendance/mark",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-attendance", "mark"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/teacher-attendance/all - Get All Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-attendance/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-attendance", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/teacher-attendance/:id - Get Attendance by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-attendance/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-attendance", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/teacher-attendance/teacher/:teacherId - Get Teacher Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-attendance/teacher/:teacherId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-attendance", "teacher", ":teacherId"]
+                }
+              }
+            },
+            {
+              "name": "PUT /staff-panel/teacher-attendance/:id - Update Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"absent\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/teacher-attendance/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "teacher-attendance", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.20 Documents",
+          "item": [
+            {
+              "name": "POST /staff-panel/documents/upload - Upload Document",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {"key": "document", "type": "file"},
+                    {"key": "type", "value": "certificate", "type": "text"},
+                    {"key": "studentId", "value": "student_id", "type": "text"}
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/documents/upload",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "documents", "upload"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/documents/all - Get All Documents",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/documents/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "documents", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/documents/:id - Get Document by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/documents/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "documents", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /staff-panel/documents/:id - Delete Document",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/documents/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "documents", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.21 Notifications",
+          "item": [
+            {
+              "name": "POST /staff-panel/notifications/send - Send Notification",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Notification Title\",\n  \"message\": \"Notification Message\",\n  \"recipientType\": \"student\",\n  \"recipientId\": \"student_id\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notifications/send",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notifications", "send"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/notifications/all - Get All Notifications",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notifications/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notifications", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /staff-panel/notifications/:id - Get Notification by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/staff-panel/notifications/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["staff-panel", "notifications", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.22 Staff Optimized APIs",
+          "item": [
+            {
+              "name": "GET /admin-panel/staff/all - Get All Staff (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/staff/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "staff", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin-panel/teachers/all - Get All Teachers (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/teachers/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "teachers", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin-panel/students/all - Get All Students (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/students/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "students", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin-panel/fees/all - Get All Fees (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/fees/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "fees", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin-panel/hostel/all - Get All Hostel (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/hostel/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "hostel", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin-panel/transport/all - Get All Transport (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/transport/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "transport", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /admin-panel/library/all - Get All Library (Optimized)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin-panel/library/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin-panel", "library", "all"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Teacher Panel",
+      "description": "Teacher panel APIs for timetable, assignments, attendance, and more",
+      "item": [
+        {
+          "name": "5.1 Timetable",
+          "item": [
+            {
+              "name": "POST /teacher-panel/timetable/add - Add Timetable",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"day\": \"Monday\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"10:00\",\n  \"room\": \"Room 101\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/timetable/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "timetable", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/timetable/all - Get All Timetables",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/timetable/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "timetable", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/timetable/:id - Get Timetable by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/timetable/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "timetable", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/timetable/:id - Update Timetable",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"room\": \"Room 202\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/timetable/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "timetable", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/timetable/:id - Delete Timetable",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/timetable/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "timetable", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Assignments",
+          "item": [
+            {
+              "name": "POST /teacher-panel/assignment/create - Create Assignment",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Math Assignment 1\",\n  \"description\": \"Complete exercises 1-10\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"dueDate\": \"2024-02-15\",\n  \"totalMarks\": 50\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/assignment/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "assignment", "create"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/assignment/all - Get All Assignments",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/assignment/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "assignment", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/assignment/:id - Get Assignment by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/assignment/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "assignment", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/assignment/:id - Update Assignment",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Updated Assignment Title\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/assignment/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "assignment", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/assignment/:id - Delete Assignment",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/assignment/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "assignment", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Diary",
+          "item": [
+            {
+              "name": "POST /teacher-panel/diary/create - Create Diary Entry",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classId\": \"class_id\",\n  \"date\": \"2024-01-15\",\n  \"topic\": \"Algebra Basics\",\n  \"homework\": \"Complete exercises 1-5\",\n  \"remarks\": \"Good class participation\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/diary/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "diary", "create"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/diary/all - Get All Diary Entries",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/diary/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "diary", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/diary/:id - Get Diary Entry by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/diary/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "diary", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/diary/:id - Update Diary Entry",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"homework\": \"Updated homework\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/diary/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "diary", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/diary/:id - Delete Diary Entry",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/diary/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "diary", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Teacher Notice",
+          "item": [
+            {
+              "name": "POST /teacher-panel/notice/create - Create Notice",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Exam Notice\",\n  \"description\": \" exams will be held next week\",\n  \"forStudent\": true,\n  \"forParent\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/notice/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "notice", "create"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/notice/all - Get All Notices",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/notice/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "notice", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/notice/:id - Get Notice by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/notice/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "notice", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/notice/:id - Update Notice",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Updated Notice Title\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/notice/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "notice", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/notice/:id - Delete Notice",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/notice/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "notice", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Live Class",
+          "item": [
+            {
+              "name": "POST /teacher-panel/live-class/start - Start Live Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"title\": \"Live Math Class\",\n  \"meetingLink\": \"https://meet.google.com/abc-defg-hij\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/live-class/start",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "live-class", "start"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/live-class/all - Get All Live Classes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/live-class/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "live-class", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/live-class/:id - Get Live Class by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/live-class/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "live-class", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/live-class/end/:id - End Live Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/live-class/end/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "live-class", "end", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.6 Video Class",
+          "item": [
+            {
+              "name": "POST /teacher-panel/video-class/upload - Upload Video Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Math Video Lecture\",\n  \"description\": \"Chapter 1 Introduction\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"videoUrl\": \"https://video.url\",\n  \"duration\": \"45 minutes\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/video-class/upload",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "video-class", "upload"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/video-class/all - Get All Video Classes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/video-class/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "video-class", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/video-class/:id - Get Video Class by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/video-class/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "video-class", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/video-class/:id - Delete Video Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/video-class/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "video-class", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.7 Quiz",
+          "item": [
+            {
+              "name": "POST /teacher-panel/quiz/create - Create Quiz",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Math Quiz 1\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"questions\": [\n    {\"question\": \"2+2=?\", \"options\": [\"3\", \"4\", \"5\"], \"correctAnswer\": \"4\"}\n  ],\n  \"duration\": 30,\n  \"totalMarks\": 50\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/quiz/create",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "quiz", "create"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/quiz/all - Get All Quizzes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/quiz/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "quiz", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/quiz/:id - Get Quiz by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/quiz/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "quiz", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/quiz/:id - Update Quiz",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Updated Quiz Title\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/quiz/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "quiz", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/quiz/:id - Delete Quiz",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/quiz/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "quiz", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.8 Resources",
+          "item": [
+            {
+              "name": "POST /teacher-panel/resource/upload - Upload Resource",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Math Notes\",\n  \"description\": \"Chapter 1 Notes\",\n  \"classId\": \"class_id\",\n  \"subject\": \"Mathematics\",\n  \"fileUrl\": \"https://file.url\",\n  \"type\": \"pdf\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/resource/upload",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "resource", "upload"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/resource/all - Get All Resources",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/resource/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "resource", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/resource/:id - Get Resource by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/resource/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "resource", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /teacher-panel/resource/:id - Delete Resource",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/resource/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "resource", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.9 Attendance",
+          "item": [
+            {
+              "name": "POST /teacher-panel/attendance/mark - Mark Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classId\": \"class_id\",\n  \"date\": \"2024-01-15\",\n  \"attendance\": [\n    {\"studentId\": \"student_id\", \"status\": \"present\"}\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/attendance/mark",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "attendance", "mark"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/attendance/all - Get All Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/attendance/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "attendance", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/attendance/class/:classId - Get Class Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/attendance/class/:classId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "attendance", "class", ":classId"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/attendance/student/:studentId - Get Student Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/attendance/student/:studentId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "attendance", "student", ":studentId"]
+                }
+              }
+            },
+            {
+              "name": "PUT /teacher-panel/attendance/:id - Update Attendance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"status\": \"absent\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/attendance/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "attendance", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.10 Reports",
+          "item": [
+            {
+              "name": "GET /teacher-panel/reports/student-performance - Student Performance",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/reports/student-performance",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "reports", "student-performance"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/reports/class-attendance - Class Attendance Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/reports/class-attendance",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "reports", "class-attendance"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/reports/exam-results - Exam Results Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/reports/exam-results",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "reports", "exam-results"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/reports/assignment-submission - Assignment Submission",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/reports/assignment-submission",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "reports", "assignment-submission"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.11 Parent Alerts",
+          "item": [
+            {
+              "name": "POST /teacher-panel/parent-alerts/send - Send Parent Alert",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"type\": \"low_attendance\",\n  \"message\": \"Student attendance is below 75%\",\n  \"priority\": \"high\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/parent-alerts/send",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "parent-alerts", "send"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/parent-alerts/all - Get All Parent Alerts",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/parent-alerts/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "parent-alerts", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/parent-alerts/:id - Get Alert by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/parent-alerts/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "parent-alerts", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.12 Dashboard",
+          "item": [
+            {
+              "name": "GET /teacher-panel/dashboard/stats - Get Dashboard Stats",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/dashboard/stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "dashboard", "stats"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/dashboard/classes - Get Teacher Classes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/dashboard/classes",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "dashboard", "classes"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/dashboard/students - Get Students By Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/dashboard/students",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "dashboard", "students"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/dashboard/recent-activities - Get Recent Activities",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/dashboard/recent-activities",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "dashboard", "recent-activities"]
+                }
+              }
+            },
+            {
+              "name": "GET /teacher-panel/dashboard/upcoming-classes - Get Upcoming Classes",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/teacher-panel/dashboard/upcoming-classes",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["teacher-panel", "dashboard", "upcoming-classes"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Fee Panel",
+      "description": "Fee management, structure, reports, and extras APIs",
+      "item": [
+        {
+          "name": "6.1 Fee Structure",
+          "item": [
+            {
+              "name": "POST /fee-panel/fee-structure/add - Add Fee Structure",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classId\": \"class_id\",\n  \"feeType\": \"Tuition Fee\",\n  \"amount\": 5000,\n  \"frequency\": \"monthly\",\n  \"dueDate\": \"10th of each month\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-structure/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-structure", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/fee-structure/all - Get All Fee Structures",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-structure/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-structure", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/fee-structure/:id - Get Fee Structure by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-structure/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-structure", ":id"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/fee-structure/class/:classId - Get Fee Structure by Class",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-structure/class/:classId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-structure", "class", ":classId"]
+                }
+              }
+            },
+            {
+              "name": "PUT /fee-panel/fee-structure/:id - Update Fee Structure",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 5500\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-structure/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-structure", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /fee-panel/fee-structure/:id - Delete Fee Structure",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-structure/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-structure", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Fee Admin",
+          "item": [
+            {
+              "name": "POST /fee-panel/fee-admin/add - Add Fee",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"classId\": \"class_id\",\n  \"amount\": 5000,\n  \"feeType\": \"Tuition Fee\",\n  \"paymentMode\": \"Cash\",\n  \"date\": \"2024-01-15\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-admin/add",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-admin", "add"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/fee-admin/all - Get All Fees",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-admin/all",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-admin", "all"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/fee-admin/:id - Get Fee by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-admin/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-admin", ":id"]
+                }
+              }
+            },
+            {
+              "name": "PUT /fee-panel/fee-admin/:id - Update Fee",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 5500\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-admin/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-admin", ":id"]
+                }
+              }
+            },
+            {
+              "name": "DELETE /fee-panel/fee-admin/:id - Delete Fee",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/fee-admin/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "fee-admin", ":id"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.3 Fee Dashboard",
+          "item": [
+            {
+              "name": "GET /fee-panel/dashboard/stats - Get Dashboard Stats",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/dashboard/stats",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "dashboard", "stats"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/dashboard/collection - Get Fee Collection",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/dashboard/collection",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "dashboard", "collection"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/dashboard/pending - Get Pending Fees",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/dashboard/pending",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "dashboard", "pending"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.4 Fee Reports",
+          "item": [
+            {
+              "name": "GET /fee-panel/reports/daily - Get Daily Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/reports/daily",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "reports", "daily"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/reports/monthly - Get Monthly Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/reports/monthly",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "reports", "monthly"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/reports/class-wise - Get Class-wise Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/reports/class-wise",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "reports", "class-wise"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/reports/pending - Get Pending Report",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/reports/pending",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "reports", "pending"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.5 Fee Extras",
+          "item": [
+            {
+              "name": "GET /fee-panel/extras/receipts - Get Receipts",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/extras/receipts",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "extras", "receipts"]
+                }
+              }
+            },
+            {
+              "name": "GET /fee-panel/extras/hostel-library - Get Hostel Library Fees",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/extras/hostel-library",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "extras", "hostel-library"]
+                }
+              }
+            },
+            {
+              "name": "POST /fee-panel/extras/hostel-library - Create Hostel Library Fee",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"studentId\": \"student_id\",\n  \"type\": \"hostel\",\n  \"amount\": 3000,\n  \"month\": \"January\",\n  \"year\": 2024\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/fee-panel/extras/hostel-library",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["fee-panel", "extras", "hostel-library"]
+                }
+              }
+            },
+            {
+              "name": "PUT /fee-panel/extras/hostel-library/:id - Update Hostel Library Fee",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{
+                    "key": "token",
+                    "value": "{{token}}",
+                    "type": "string"
+                  }]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 3500\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/fee

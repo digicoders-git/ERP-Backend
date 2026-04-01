@@ -1,0 +1,31 @@
+const express = require('express');
+const router = express.Router();
+const ctrl = require('../controller/parentStudentController');
+const psAuth = require('../middleware/parentStudentAuth');
+const auth = require('../middleware/auth');
+
+// Public
+router.post('/login', ctrl.login);
+
+// Protected — student/parent/warden
+router.get('/dashboard', psAuth, ctrl.getDashboard);
+router.get('/timetable', psAuth, ctrl.getTimetable);
+router.get('/fee', psAuth, ctrl.getFee);
+router.get('/assignments', psAuth, ctrl.getAssignments);
+router.get('/notices', psAuth, ctrl.getNotices);
+router.get('/library', psAuth, ctrl.getLibrary);
+router.get('/hostel', psAuth, ctrl.getHostel);
+router.get('/live-classes', psAuth, ctrl.getLiveClasses);
+router.get('/recorded-classes', psAuth, ctrl.getRecordedClasses);
+router.get('/ediary', psAuth, ctrl.getEDiary);
+router.put('/change-password', psAuth, ctrl.changePassword);
+
+// Warden only
+router.get('/warden/services', psAuth, ctrl.getWardenServices);
+router.post('/warden/services', psAuth, ctrl.recordWardenService);
+
+// Admin — create/manage users
+router.post('/admin/create-user', auth, ctrl.createUser);
+router.get('/admin/users', auth, ctrl.getAllUsers);
+
+module.exports = router;
