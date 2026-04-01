@@ -18,7 +18,7 @@ exports.addMenu = async (req, res) => {
     }
 
     const menu = new HostelMenu({
-      day,
+      day ,
       breakfast,
       lunch,
       dinner,

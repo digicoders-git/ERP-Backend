@@ -9,7 +9,7 @@ exports.getTransportStats = async (req, res) => {
     const adminBranch = req.user.branch;
 
     const stats = await Vehicle.aggregate([
-      { $match: { branch: adminBranch || branch } },
+      { $match: { branch: adminBranch || branch  } },
       {
         $facet: {
           total: [{ $count: 'count' }],

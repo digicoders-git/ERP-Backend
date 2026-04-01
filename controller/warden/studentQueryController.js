@@ -1,5 +1,5 @@
 const StudentQuery = require('../../model/StudentQuery');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 exports.getAll = async (req, res) => {
   try {

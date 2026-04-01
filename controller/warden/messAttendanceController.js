@@ -1,5 +1,5 @@
 const MessAttendance = require('../../model/MessAttendance');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 exports.getAll = async (req, res) => {
   try {

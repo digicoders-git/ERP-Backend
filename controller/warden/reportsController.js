@@ -5,7 +5,7 @@ const HostelAllocation = require('../../model/HostelAllocation');
 const HostelFee = require('../../model/HostelFee');
 const HostelAttendance = require('../../model/HostelAttendance');
 const HostelComplaint = require('../../model/HostelComplaint');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 exports.getOverview = async (req, res) => {
   try {

@@ -1,6 +1,6 @@
 const MessAttendance = require('../../model/MessAttendance');
 const HostelComplaint = require('../../model/HostelComplaint');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 // Combined mess data - menu + attendance + complaints in one call
 exports.getMessData = async (req, res) => {

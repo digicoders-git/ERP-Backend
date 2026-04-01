@@ -8,7 +8,7 @@ const CheckInOut = require('../../model/CheckInOut');
 const EntryExit = require('../../model/EntryExit');
 const HostelFee = require('../../model/HostelFee');
 const LeaveGatePass = require('../../model/LeaveGatePass');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 exports.getAnalytics = async (req, res) => {
   try {

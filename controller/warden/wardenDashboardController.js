@@ -15,7 +15,7 @@ const { successResponse, errorResponse } = require('../../responseFormatter');
 // Single call - returns everything needed for dashboard
 exports.getDashboardData = async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today  = new Date().toISOString().split('T')[0];
 
     const [
       totalRooms,

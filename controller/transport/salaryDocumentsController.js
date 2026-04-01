@@ -3,10 +3,11 @@ const Salary = require('../../model/Salary');
 const DriverDocument = require('../../model/DriverDocument');
 const Admin = require('../../model/Admin');
 
-const getDriver = async (driverId) => {
+const getDriver = async (driverId) =>  {
   const driver = await Driver.findById(driverId).lean();
   if (!driver) return null;
   return driver;
+
 };
 
 // Get salary info + history for driver

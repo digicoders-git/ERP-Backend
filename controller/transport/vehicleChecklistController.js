@@ -9,7 +9,7 @@ const getDriver = async (driverId) => {
 };
 
 // Submit daily checklist
-exports.submitChecklist = async (req, res) => {
+exports.submitChecklist = async (req,  res) => {
   try {
     const driver = await getDriver(req.driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });

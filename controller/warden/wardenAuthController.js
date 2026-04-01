@@ -1,7 +1,7 @@
 const Warden = require('../../model/Warden');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRES = '7d';

@@ -1,5 +1,5 @@
 const HostelAttendance = require('../../model/HostelAttendance');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 exports.getAttendance = async (req, res) => {
   try {
