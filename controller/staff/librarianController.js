@@ -1,4 +1,5 @@
 const Librarian = require('../../model/Librarian');
+const Admin = require('../../model/Admin');
 const { successResponse, errorResponse } = require('../../responseFormatter');
 
 exports.getAllLibrarians = async (req, res) => {
@@ -57,6 +58,19 @@ exports.createLibrarian = async (req, res) => {
 
     await librarian.save();
 
+    // Create Admin login record so librarian can login via /api/admin/login
+    const existingAdmin = await Admin.findOne({ email });
+    if (!existingAdmin) {
+      await Admin.create({
+        email,
+        password,
+        role: 'libraryAdmin',
+        branch: req.body.branch || undefined,
+        client: req.body.client || undefined,
+        status: true
+      });
+    }
+
     const librarianData = librarian.toObject();
     delete librarianData.password;
 
@@ -114,6 +128,9 @@ exports.deleteLibrarian = async (req, res) => {
     if (!librarian) {
       return errorResponse(res, 'Librarian not found', 404);
     }
+
+    // Remove corresponding Admin login record
+    await Admin.findOneAndDelete({ email: librarian.email, role: 'libraryAdmin' });
 
     return successResponse(res, null, 'Librarian deleted successfully');
   } catch (error) {
