@@ -76,7 +76,16 @@ exports.getTodayChecklist = async (req, res) => {
 exports.getAllForBranch = async (req, res) => {
   try {
     const { date } = req.query;
-    const query = { branch: req.user.branch };
+
+    let branchId = req.user?.branch;
+    if (!branchId) {
+      const Admin = require('../../model/Admin');
+      const admin = await Admin.findById(req.userId).lean();
+      if (!admin) return res.status(403).json({ message: 'Access denied' });
+      branchId = admin.branch;
+    }
+
+    const query = { branch: branchId };
     if (date) query.date = date;
 
     const [checklists, total] = await Promise.all([

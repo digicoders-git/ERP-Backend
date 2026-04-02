@@ -54,7 +54,16 @@ exports.getMyHistory = async (req, res) => {
 exports.getAllForBranch = async (req, res) => {
   try {
     const { status, reportType } = req.query;
-    const query = { branch: req.user.branch };
+
+    let branchId = req.user?.branch;
+    if (!branchId) {
+      const Admin = require('../../model/Admin');
+      const admin = await Admin.findById(req.userId).lean();
+      if (!admin) return res.status(403).json({ message: 'Access denied' });
+      branchId = admin.branch;
+    }
+
+    const query = { branch: branchId };
     if (status) query.status = status;
     if (reportType) query.reportType = reportType;
 
@@ -64,10 +73,10 @@ exports.getAllForBranch = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(100)
         .lean(),
-      DriverComplaint.countDocuments({ branch: req.user.branch, status: 'Pending' }),
-      DriverComplaint.countDocuments({ branch: req.user.branch, status: 'In Progress' }),
-      DriverComplaint.countDocuments({ branch: req.user.branch, status: 'Resolved' }),
-      DriverComplaint.countDocuments({ branch: req.user.branch, reportType: 'emergency', status: 'Pending' })
+      DriverComplaint.countDocuments({ branch: branchId, status: 'Pending' }),
+      DriverComplaint.countDocuments({ branch: branchId, status: 'In Progress' }),
+      DriverComplaint.countDocuments({ branch: branchId, status: 'Resolved' }),
+      DriverComplaint.countDocuments({ branch: branchId, reportType: 'emergency', status: 'Pending' })
     ]);
 
     res.status(200).json({
