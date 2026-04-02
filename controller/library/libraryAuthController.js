@@ -42,6 +42,10 @@ exports.getSettings = async (req, res) => {
     const admin = await Admin.findById(req.userId).lean();
     if (!admin || admin.role !== 'libraryAdmin') return res.status(403).json({ message: 'Access denied' });
 
+    if (!admin.branch || !admin.client) {
+      return res.status(400).json({ message: 'Librarian account is missing branch or client. Please update the librarian record.' });
+    }
+
     let settings = await LibrarySettings.findOne({ branch: admin.branch }).lean();
     if (!settings) {
       settings = await LibrarySettings.create({ branch: admin.branch, client: admin.client });

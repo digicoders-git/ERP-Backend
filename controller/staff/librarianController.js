@@ -30,10 +30,14 @@ exports.getLibrarianById = async (req, res) => {
 
 exports.createLibrarian = async (req, res) => {
   try {
-    const { name, email, phone, password, qualification, status } = req.body;
+    const { name, email, phone, password, qualification, status, branch, client } = req.body;
 
     if (!name || !email || !phone || !password) {
       return errorResponse(res, 'All fields are required', 400);
+    }
+
+    if (!branch || !client) {
+      return errorResponse(res, 'branch and client are required', 400);
     }
 
     const existingLibrarian = await Librarian.findOne({ $or: [{ email }, { phone }] });

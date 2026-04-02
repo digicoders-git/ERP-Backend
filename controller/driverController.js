@@ -1,10 +1,11 @@
 const Driver = require('../model/Driver');
 const Admin = require('../model/Admin');
+const bcrypt = require('bcryptjs');
 
 // Create Driver
 exports.createDriver = async (req, res) => {
   try {
-    const { name, mobileNo, licenseNo, licenseExpiryDate, experience } = req.body;
+    const { name, mobileNo, password, licenseNo, licenseExpiryDate, experience } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -17,9 +18,12 @@ exports.createDriver = async (req, res) => {
       return res.status(400).json({ message: 'License number already exists' });
     }
 
+    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+
     const newDriver = new Driver({
       name,
       mobileNo,
+      password: hashedPassword,
       licenseNo: licenseNo.toUpperCase(),
       licenseExpiryDate,
       experience,
@@ -137,7 +141,7 @@ exports.getDriverById = async (req, res) => {
 exports.updateDriver = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, mobileNo, licenseNo, licenseExpiryDate, experience } = req.body;
+    const { name, mobileNo, password, licenseNo, licenseExpiryDate, experience } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -163,6 +167,7 @@ exports.updateDriver = async (req, res) => {
 
     if (name) driver.name = name;
     if (mobileNo) driver.mobileNo = mobileNo;
+    if (password) driver.password = await bcrypt.hash(password, 10);
     if (licenseNo) driver.licenseNo = licenseNo.toUpperCase();
     if (licenseExpiryDate) driver.licenseExpiryDate = licenseExpiryDate;
     if (experience !== undefined) driver.experience = experience;
