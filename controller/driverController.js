@@ -23,7 +23,6 @@ exports.createDriver = async (req, res) => {
     const newDriver = new Driver({
       name,
       mobileNo,
-      password: hashedPassword,
       licenseNo: licenseNo.toUpperCase(),
       licenseExpiryDate,
       experience,
@@ -33,7 +32,14 @@ exports.createDriver = async (req, res) => {
     });
 
     await newDriver.save();
-    res.status(201).json({ message: 'Driver created successfully', driver: newDriver });
+
+    if (hashedPassword) {
+      await Driver.findByIdAndUpdate(newDriver._id, { password: hashedPassword });
+    }
+
+    const driverData = newDriver.toObject();
+    delete driverData.password;
+    res.status(201).json({ message: 'Driver created successfully', driver: driverData });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -167,13 +173,19 @@ exports.updateDriver = async (req, res) => {
 
     if (name) driver.name = name;
     if (mobileNo) driver.mobileNo = mobileNo;
-    if (password) driver.password = await bcrypt.hash(password, 10);
     if (licenseNo) driver.licenseNo = licenseNo.toUpperCase();
     if (licenseExpiryDate) driver.licenseExpiryDate = licenseExpiryDate;
     if (experience !== undefined) driver.experience = experience;
 
+    if (password) {
+      await Driver.findByIdAndUpdate(id, { password: await bcrypt.hash(password, 10) });
+    }
+
     await driver.save();
-    res.status(200).json({ message: 'Driver updated successfully', driver });
+
+    const driverData = driver.toObject();
+    delete driverData.password;
+    res.status(200).json({ message: 'Driver updated successfully', driver: driverData });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

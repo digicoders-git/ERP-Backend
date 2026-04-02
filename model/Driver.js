@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const driverSchema = new mongoose.Schema({
   name: {
@@ -13,7 +14,8 @@ const driverSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    default: null
+    default: null,
+    select: false
   },
   licenseNo: {
     type: String,
