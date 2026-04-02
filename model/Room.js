@@ -53,4 +53,7 @@ const roomSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Same roomNo not allowed on same floor in same hostel
+roomSchema.index({ hostel: 1, floorNo: 1, roomNo: 1 }, { unique: true });
+
 module.exports = mongoose.model('Room', roomSchema);

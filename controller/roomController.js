@@ -32,6 +32,11 @@ exports.createRoom = async (req, res) => {
       return res.status(403).json({ message: 'Room type does not belong to your branch' });
     }
 
+    const duplicate = await Room.findOne({ hostel: hostelId, floorNo, roomNo });
+    if (duplicate) {
+      return res.status(400).json({ message: `Room ${roomNo} already exists on floor ${floorNo} in this hostel` });
+    }
+
     const newRoom = new Room({
       hostel: hostelId,
       floorNo,
@@ -202,6 +207,15 @@ exports.updateRoom = async (req, res) => {
     if (roomNo) room.roomNo = roomNo;
     if (capacity) room.capacity = capacity;
     if (monthlyRent !== undefined) room.monthlyRent = monthlyRent;
+
+    // Check duplicate on update (exclude current room)
+    const targetHostel = hostelId || room.hostel.toString();
+    const targetFloor = floorNo !== undefined ? floorNo : room.floorNo;
+    const targetRoomNo = roomNo || room.roomNo;
+    const duplicate = await Room.findOne({ hostel: targetHostel, floorNo: targetFloor, roomNo: targetRoomNo, _id: { $ne: id } });
+    if (duplicate) {
+      return res.status(400).json({ message: `Room ${targetRoomNo} already exists on floor ${targetFloor} in this hostel` });
+    }
 
     await room.save();
     res.status(200).json({ message: 'Room updated successfully', room });
