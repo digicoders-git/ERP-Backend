@@ -18,6 +18,7 @@ exports.driverLogin = async (req, res) => {
     }
 
     const driver = await Driver.findOne({ mobileNo })
+      .select('+password')
       .populate('branch', 'branchName branchCode')
       .populate('client', 'name');
 
@@ -184,7 +185,7 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ message: 'Old password and new password are required' });
     }
 
-    const driver = await Driver.findById(req.driverId);
+    const driver = await Driver.findById(req.driverId).select('+password');
     if (!driver) {
       return res.status(404).json({ message: 'Driver not found' });
     }
@@ -194,8 +195,7 @@ exports.changePassword = async (req, res) => {
       return res.status(401).json({ message: 'Old password is incorrect' });
     }
 
-    driver.password = await bcrypt.hash(newPassword, 10);
-    await driver.save();
+    await Driver.findByIdAndUpdate(req.driverId, { password: await bcrypt.hash(newPassword, 10) });
 
     res.status(200).json({ message: 'Password changed successfully' });
   } catch (error) {
