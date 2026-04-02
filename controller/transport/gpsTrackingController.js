@@ -1,331 +1,291 @@
 const Vehicle = require('../../model/Vehicle');
 const Driver = require('../../model/Driver');
 const Route = require('../../model/Route');
+const RouteStop = require('../../model/RouteStop');
+const TransportAssignment = require('../../model/TransportAssignment');
 const TransportAllocation = require('../../model/TransportAllocation');
-const { successResponse, errorResponse } = require('../../responseFormatter');
+const VehicleLocation = require('../../model/VehicleLocation');
+const Branch = require('../../model/Branch');
 
-// Model for GPS location (in-memory or Redis for real-time)
-// In production, use Redis or MongoDB with TTL
-const vehicleLocations = new Map();
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-// ─── UPDATE VEHICLE LOCATION (Driver App) ────────────────────────────────────
-
+// Driver updates location — saved to MongoDB
 exports.updateLocation = async (req, res) => {
   try {
-    const { vehicleId, latitude, longitude, speed, heading } = req.body;
-    
+    const { vehicleId, latitude, longitude, speed = 0, heading = 0 } = req.body;
     if (!vehicleId || !latitude || !longitude) {
-      return errorResponse(res, 'vehicleId, latitude and longitude are required', 400);
+      return res.status(400).json({ message: 'vehicleId, latitude and longitude are required' });
     }
 
     const vehicle = await Vehicle.findById(vehicleId).lean();
-    if (!vehicle) return errorResponse(res, 'Vehicle not found', 404);
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
 
-    const locationData = {
-      vehicleId,
-      vehicleNumber: vehicle.vehicleNumber,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      speed: speed || 0,
-      heading: heading || 0,
-      timestamp: new Date(),
-      status: speed > 5 ? 'moving' : 'stopped'
-    };
+    const driver = await Driver.findById(req.driverId).lean();
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
-    // Store in memory (use Redis in production)
-    vehicleLocations.set(vehicleId, locationData);
+    const loc = await VehicleLocation.findOneAndUpdate(
+      { vehicle: vehicleId },
+      {
+        vehicle: vehicleId,
+        driver: req.driverId,
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        speed: parseFloat(speed),
+        heading: parseFloat(heading),
+        status: speed > 5 ? 'moving' : 'stopped',
+        branch: driver.branch,
+        client: driver.client,
+        recordedAt: new Date()
+      },
+      { upsert: true, new: true }
+    ).lean();
 
-    // Optionally save to database for history
-    // await VehicleLocation.create(locationData);
-
-    return successResponse(res, locationData, 'Location updated');
+    return res.status(200).json({ success: true, message: 'Location updated', data: loc });
   } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// ─── GET VEHICLE LOCATION (Parent/Admin) ─────────────────────────────────────
-
+// Get latest location of a vehicle
 exports.getVehicleLocation = async (req, res) => {
   try {
-    const { vehicleId } = req.params;
-    
-    const location = vehicleLocations.get(vehicleId);
-    if (!location) {
-      return errorResponse(res, 'Location not available', 404);
-    }
+    const loc = await VehicleLocation.findOne({ vehicle: req.params.vehicleId })
+      .populate('driver', 'name mobileNo')
+      .lean();
 
-    // Check if location is stale (older than 5 minutes)
-    const now = new Date();
-    const diff = (now - new Date(location.timestamp)) / 1000 / 60;
-    if (diff > 5) {
-      return errorResponse(res, 'Location data is stale', 404);
-    }
+    if (!loc) return res.status(404).json({ message: 'Location not available' });
 
-    return successResponse(res, location, 'Location fetched');
+    const staleMinutes = (new Date() - new Date(loc.recordedAt)) / 60000;
+    return res.status(200).json({
+      success: true,
+      data: { ...loc, isOnline: staleMinutes < 5, staleMinutes: Math.round(staleMinutes) }
+    });
   } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// ─── GET ALL ACTIVE VEHICLES LOCATION ────────────────────────────────────────
-
+// Get all active vehicles location for a branch
 exports.getAllVehiclesLocation = async (req, res) => {
   try {
-    const { branch } = req.query;
-    
-    const vehicles = await Vehicle.find({ 
-      branch, 
-      status: 'active' 
-    }).select('_id vehicleNumber vehicleType').lean();
+    const branchId = req.query.branch || req.user?.branch;
+    const vehicles = await Vehicle.find({ branch: branchId, status: true })
+      .select('_id vehicleNo vehicleType vehicleCapacity').lean();
 
-    const locations = vehicles.map(v => {
-      const loc = vehicleLocations.get(v._id.toString());
+    const vehicleIds = vehicles.map(v => v._id);
+    const locations = await VehicleLocation.find({ vehicle: { $in: vehicleIds } })
+      .populate('driver', 'name mobileNo').lean();
+
+    const locMap = {};
+    locations.forEach(l => { locMap[l.vehicle.toString()] = l; });
+
+    const now = new Date();
+    const result = vehicles.map(v => {
+      const loc = locMap[v._id.toString()];
+      const staleMinutes = loc ? (now - new Date(loc.recordedAt)) / 60000 : null;
       return {
         vehicleId: v._id,
-        vehicleNumber: v.vehicleNumber,
+        vehicleNo: v.vehicleNo,
         vehicleType: v.vehicleType,
         location: loc || null,
-        isOnline: loc && ((new Date() - new Date(loc.timestamp)) / 1000 / 60) < 5
+        isOnline: loc ? staleMinutes < 5 : false
       };
     });
 
-    return successResponse(res, locations, 'All vehicles location fetched');
+    return res.status(200).json({ success: true, data: result });
   } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// ─── TRACK STUDENT VEHICLE ───────────────────────────────────────────────────
-
+// Track vehicle assigned to a student
 exports.trackStudentVehicle = async (req, res) => {
   try {
-    const { studentId } = req.params;
-    
-    const allocation = await TransportAllocation.findOne({ 
-      studentId: studentId.toString(), 
-      status: 'active' 
-    }).lean();
+    const allocation = await TransportAllocation.findOne({
+      _id: req.params.studentId,
+      status: true
+    }).populate('route', 'routeName').populate('vehicle', 'vehicleNo vehicleType').lean();
 
-    if (!allocation) {
-      return errorResponse(res, 'No transport allocated for this student', 404);
-    }
+    if (!allocation) return res.status(404).json({ message: 'No transport allocated for this student' });
 
-    const [vehicle, driver, route, location] = await Promise.all([
-      Vehicle.findById(allocation.vehicleId).lean(),
-      Driver.findById(allocation.driverId).lean(),
-      Route.findById(allocation.routeId).lean(),
-      Promise.resolve(vehicleLocations.get(allocation.vehicleId?.toString()))
-    ]);
+    const assignment = await TransportAssignment.findOne({
+      vehicle: allocation.vehicle._id, status: true
+    }).populate('driver', 'name mobileNo').lean();
 
-    const isOnline = location && ((new Date() - new Date(location.timestamp)) / 1000 / 60) < 5;
+    const loc = await VehicleLocation.findOne({ vehicle: allocation.vehicle._id }).lean();
+    const isOnline = loc && (new Date() - new Date(loc.recordedAt)) / 60000 < 5;
 
-    return successResponse(res, {
-      vehicle: {
-        id: vehicle?._id,
-        number: vehicle?.vehicleNumber,
-        type: vehicle?.vehicleType
-      },
-      driver: {
-        name: driver?.name,
-        mobile: driver?.mobile
-      },
-      route: {
-        name: route?.routeName,
-        pickupPoint: allocation.pickupPoint,
-        pickupTime: allocation.pickupTime
-      },
-      location: isOnline ? location : null,
-      status: isOnline ? 'online' : 'offline'
-    }, 'Vehicle tracking data');
-  } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
-  }
-};
-
-// ─── ROUTE OPTIMIZATION ───────────────────────────────────────────────────────
-
-exports.optimizeRoute = async (req, res) => {
-  try {
-    const { routeId } = req.params;
-    
-    const route = await Route.findById(routeId).lean();
-    if (!route) return errorResponse(res, 'Route not found', 404);
-
-    // Get all students on this route
-    const allocations = await TransportAllocation.find({ 
-      routeId, 
-      status: 'active' 
-    })
-      .populate('studentId', 'firstName lastName currentAddress')
-      .lean();
-
-    // Simple optimization: sort by pickup time
-    const stops = allocations.map(a => ({
-      studentId: a.studentId?._id,
-      studentName: `${a.studentId?.firstName} ${a.studentId?.lastName}`,
-      address: a.studentId?.currentAddress,
-      pickupPoint: a.pickupPoint,
-      pickupTime: a.pickupTime,
-      latitude: a.latitude || 0,
-      longitude: a.longitude || 0
-    }));
-
-    // Sort by time
-    stops.sort((a, b) => {
-      const timeA = a.pickupTime?.split(':').map(Number) || [0, 0];
-      const timeB = b.pickupTime?.split(':').map(Number) || [0, 0];
-      return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+    return res.status(200).json({
+      success: true,
+      data: {
+        vehicle: { id: allocation.vehicle._id, vehicleNo: allocation.vehicle.vehicleNo, type: allocation.vehicle.vehicleType },
+        driver: assignment?.driver ? { name: assignment.driver.name, mobile: assignment.driver.mobileNo } : null,
+        route: { name: allocation.route?.routeName },
+        location: isOnline ? loc : null,
+        status: isOnline ? 'online' : 'offline'
+      }
     });
-
-    // Calculate estimated time
-    const totalStops = stops.length;
-    const avgTimePerStop = 3; // 3 minutes per stop
-    const estimatedDuration = totalStops * avgTimePerStop;
-
-    return successResponse(res, {
-      routeName: route.routeName,
-      totalStops,
-      estimatedDuration: `${estimatedDuration} minutes`,
-      optimizedStops: stops,
-      suggestions: [
-        totalStops > 20 ? 'Consider splitting this route into two' : null,
-        'Ensure pickup times have 5-minute buffer',
-        'Update GPS coordinates for accurate tracking'
-      ].filter(Boolean)
-    }, 'Route optimized');
   } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// ─── VEHICLE TRIP HISTORY ─────────────────────────────────────────────────────
-
+// Trip history from VehicleLocation records grouped by date
 exports.getTripHistory = async (req, res) => {
   try {
     const { vehicleId } = req.params;
     const { startDate, endDate } = req.query;
 
-    // In production, fetch from VehicleLocation collection
-    // For now, return mock data structure
-    const trips = [
-      {
-        date: new Date().toISOString().split('T')[0],
-        startTime: '07:00 AM',
-        endTime: '09:30 AM',
-        totalDistance: '45 km',
-        totalStops: 15,
-        status: 'completed'
-      }
-    ];
-
-    return successResponse(res, trips, 'Trip history fetched');
-  } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
-  }
-};
-
-// ─── GEOFENCE ALERTS ──────────────────────────────────────────────────────────
-
-exports.checkGeofence = async (req, res) => {
-  try {
-    const { vehicleId, latitude, longitude } = req.body;
-    
-    // Define school geofence (example: 2km radius)
-    const schoolLat = 28.7041; // Replace with actual school coordinates
-    const schoolLng = 77.1025;
-    const maxDistance = 2; // km
-
-    const distance = calculateDistance(latitude, longitude, schoolLat, schoolLng);
-    
-    const alert = {
-      vehicleId,
-      isWithinGeofence: distance <= maxDistance,
-      distance: distance.toFixed(2),
-      timestamp: new Date()
-    };
-
-    if (!alert.isWithinGeofence) {
-      // Send notification to admin
-      // await sendNotification({ type: 'geofence_breach', vehicleId, distance });
+    const match = { vehicle: new (require('mongoose').Types.ObjectId)(vehicleId) };
+    if (startDate || endDate) {
+      match.recordedAt = {};
+      if (startDate) match.recordedAt.$gte = new Date(startDate);
+      if (endDate) match.recordedAt.$lte = new Date(endDate + 'T23:59:59');
     }
 
-    return successResponse(res, alert, 'Geofence checked');
-  } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
-  }
-};
-
-// ─── HELPER: Calculate Distance ───────────────────────────────────────────────
-
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function toRad(degrees) {
-  return degrees * (Math.PI / 180);
-}
-
-// ─── DRIVER DASHBOARD ─────────────────────────────────────────────────────────
-
-exports.getDriverDashboard = async (req, res) => {
-  try {
-    const driverId = req.userId; // From auth middleware
-    
-    const driver = await Driver.findById(driverId).lean();
-    if (!driver) return errorResponse(res, 'Driver not found', 404);
-
-    const today = new Date().toISOString().split('T')[0];
-
-    const [vehicle, todayAllocations, route] = await Promise.all([
-      Vehicle.findOne({ assignedDriver: driverId, status: 'active' }).lean(),
-      TransportAllocation.find({ 
-        driverId, 
-        status: 'active' 
-      }).populate('studentId', 'firstName lastName mobile').lean(),
-      Route.findOne({ assignedDriver: driverId }).lean()
+    const history = await VehicleLocation.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$recordedAt' } },
+          maxSpeed: { $max: '$speed' },
+          avgSpeed: { $avg: '$speed' },
+          firstSeen: { $min: '$recordedAt' },
+          lastSeen: { $max: '$recordedAt' },
+          totalPoints: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: -1 } },
+      { $limit: 30 }
     ]);
 
-    const location = vehicle ? vehicleLocations.get(vehicle._id.toString()) : null;
-
-    return successResponse(res, {
-      driver: {
-        name: driver.name,
-        mobile: driver.mobile,
-        licenseNumber: driver.licenseNumber
-      },
-      vehicle: vehicle ? {
-        number: vehicle.vehicleNumber,
-        type: vehicle.vehicleType,
-        currentLocation: location
-      } : null,
-      route: route ? {
-        name: route.routeName,
-        totalStops: todayAllocations.length
-      } : null,
-      todayStudents: todayAllocations.map(a => ({
-        name: `${a.studentId?.firstName} ${a.studentId?.lastName}`,
-        pickupPoint: a.pickupPoint,
-        pickupTime: a.pickupTime,
-        mobile: a.studentId?.mobile
-      })),
-      stats: {
-        totalStudents: todayAllocations.length,
-        completedTrips: 0, // Calculate from trip history
-        pendingTrips: 2 // Morning & Evening
-      }
-    }, 'Driver dashboard data');
+    return res.status(200).json({ success: true, data: history });
   } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-module.exports = exports;
+// Geofence check — uses branch location dynamically
+exports.checkGeofence = async (req, res) => {
+  try {
+    const { vehicleId, latitude, longitude, radiusKm = 2 } = req.body;
+    if (!vehicleId || !latitude || !longitude) {
+      return res.status(400).json({ message: 'vehicleId, latitude and longitude are required' });
+    }
+
+    const vehicle = await Vehicle.findById(vehicleId).populate('branch', 'latitude longitude branchName').lean();
+    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+
+    const branch = vehicle.branch;
+    if (!branch?.latitude || !branch?.longitude) {
+      return res.status(400).json({ message: 'Branch coordinates not set. Update branch with latitude and longitude.' });
+    }
+
+    const distance = calculateDistance(parseFloat(latitude), parseFloat(longitude), branch.latitude, branch.longitude);
+    const isWithin = distance <= radiusKm;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        vehicleId,
+        branchName: branch.branchName,
+        isWithinGeofence: isWithin,
+        distanceKm: parseFloat(distance.toFixed(2)),
+        radiusKm,
+        timestamp: new Date()
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Route stops with allocation count
+exports.optimizeRoute = async (req, res) => {
+  try {
+    const route = await Route.findById(req.params.routeId).lean();
+    if (!route) return res.status(404).json({ message: 'Route not found' });
+
+    const [stops, allocations] = await Promise.all([
+      RouteStop.find({ route: req.params.routeId }).sort({ stopOrder: 1 }).lean(),
+      TransportAllocation.find({ route: req.params.routeId, status: true }).lean()
+    ]);
+
+    const stopMap = {};
+    allocations.forEach(a => {
+      const key = a.routeStop?.toString();
+      if (key) stopMap[key] = (stopMap[key] || 0) + 1;
+    });
+
+    const result = stops.map(s => ({
+      stopId: s._id,
+      stopName: s.stopName,
+      stopOrder: s.stopOrder,
+      pickupTime: s.pickupTime,
+      dropTime: s.dropTime,
+      studentsCount: stopMap[s._id.toString()] || 0
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        routeName: route.routeName,
+        totalStops: stops.length,
+        totalStudents: allocations.length,
+        estimatedDuration: `${stops.length * 3} minutes`,
+        stops: result
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Driver GPS Dashboard — uses req.driverId from driverAuth middleware
+exports.getDriverDashboard = async (req, res) => {
+  try {
+    const driverId = req.driverId;
+
+    const [driver, assignment] = await Promise.all([
+      Driver.findById(driverId).select('name mobileNo licenseNo licenseExpiryDate branch').lean(),
+      TransportAssignment.findOne({ driver: driverId, status: true })
+        .populate('vehicle', 'vehicleNo vehicleType vehicleCapacity')
+        .populate('route', 'routeName routeCode startPoint endPoint')
+        .lean()
+    ]);
+
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+    const [allocations, loc] = await Promise.all([
+      assignment ? TransportAllocation.find({ route: assignment.route?._id, status: true })
+        .populate('routeStop', 'stopName pickupTime dropTime').lean() : Promise.resolve([]),
+      assignment ? VehicleLocation.findOne({ vehicle: assignment.vehicle?._id }).lean() : Promise.resolve(null)
+    ]);
+
+    const isOnline = loc && (new Date() - new Date(loc.recordedAt)) / 60000 < 5;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        driver: { name: driver.name, mobile: driver.mobileNo, licenseNo: driver.licenseNo, licenseExpiryDate: driver.licenseExpiryDate },
+        vehicle: assignment?.vehicle ? { vehicleNo: assignment.vehicle.vehicleNo, type: assignment.vehicle.vehicleType, capacity: assignment.vehicle.vehicleCapacity } : null,
+        route: assignment?.route ? { routeName: assignment.route.routeName, routeCode: assignment.route.routeCode, startPoint: assignment.route.startPoint, endPoint: assignment.route.endPoint } : null,
+        location: isOnline ? { latitude: loc.latitude, longitude: loc.longitude, speed: loc.speed, status: loc.status, updatedAt: loc.recordedAt } : null,
+        isOnline,
+        stats: {
+          totalStudents: allocations.length,
+          totalStops: [...new Set(allocations.map(a => a.routeStop?._id?.toString()).filter(Boolean))].length
+        }
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};

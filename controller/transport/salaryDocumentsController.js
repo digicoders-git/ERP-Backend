@@ -1,5 +1,5 @@
 const Driver = require('../../model/Driver');
-const Salary = require('../../model/Salary');
+const DriverSalary = require('../../model/DriverSalary');
 const DriverDocument = require('../../model/DriverDocument');
 const Admin = require('../../model/Admin');
 
@@ -16,29 +16,80 @@ exports.getSalaryInfo = async (req, res) => {
     const driver = await getDriver(req.driverId);
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
-    const salaryHistory = await Salary.find({ teacherName: driver.name, branch: driver.branch })
-      .sort({ createdAt: -1 })
-      .limit(12)
-      .lean();
-
     const currentMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    const salaryHistory = await DriverSalary.find({ driver: req.driverId })
+      .sort({ createdAt: -1 }).limit(12).lean();
+
     const currentSalary = salaryHistory.find(s => s.month === currentMonth) || salaryHistory[0] || null;
 
     res.status(200).json({
       success: true,
       data: {
-        monthlySalary: driver.salary || currentSalary?.baseSalary || 0,
         currentMonth,
+        monthlySalary: currentSalary?.baseSalary || 0,
         paymentStatus: currentSalary?.status || 'Pending',
         paymentDate: currentSalary?.paymentDate || null,
         salaryHistory: salaryHistory.map(s => ({
           month: s.month,
-          amount: s.netSalary || s.baseSalary,
+          baseSalary: s.baseSalary,
+          allowances: s.allowances,
+          deductions: s.deductions,
+          netSalary: s.netSalary,
           status: s.status,
-          date: s.paymentDate
+          paymentDate: s.paymentDate
         }))
       }
     });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Admin — add/update driver salary
+exports.upsertSalary = async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.userId).lean();
+    if (!admin) return res.status(403).json({ message: 'Access denied' });
+
+    const { driverId, month, baseSalary, allowances = 0, deductions = 0, status, paymentDate } = req.body;
+    if (!driverId || !month || !baseSalary) {
+      return res.status(400).json({ message: 'driverId, month and baseSalary are required' });
+    }
+
+    const driver = await Driver.findById(driverId).lean();
+    if (!driver) return res.status(404).json({ message: 'Driver not found' });
+
+    const netSalary = baseSalary + allowances - deductions;
+
+    const salary = await DriverSalary.findOneAndUpdate(
+      { driver: driverId, month },
+      { driver: driverId, driverName: driver.name, month, baseSalary, allowances, deductions, netSalary, status: status || 'Pending', paymentDate: paymentDate || null, branch: driver.branch, client: driver.client, createdBy: req.userId },
+      { new: true, upsert: true }
+    ).lean();
+
+    res.status(200).json({ success: true, message: 'Salary saved', data: salary });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Admin — get all driver salaries for branch
+exports.getAllDriverSalaries = async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.userId).lean();
+    if (!admin) return res.status(403).json({ message: 'Access denied' });
+
+    const { month, status } = req.query;
+    const query = { branch: admin.branch };
+    if (month) query.month = month;
+    if (status) query.status = status;
+
+    const salaries = await DriverSalary.find(query)
+      .populate('driver', 'name mobileNo licenseNo')
+      .sort({ createdAt: -1 }).lean();
+
+    res.status(200).json({ success: true, data: salaries });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -103,7 +154,9 @@ exports.upsertDocument = async (req, res) => {
 
     const doc = await DriverDocument.findOneAndUpdate(
       { driver: driverId, docType },
-      { driver: driverId, docType, number, issueDate, expiryDate, status, branch: driver.branch, client: driver.client, createdBy: req.userId },
+      { driver: driverId, docType, number, issueDate, expiryDate, status,
+        fileUrl: req.file ? `/uploads/documents/${req.file.filename}` : undefined,
+        branch: driver.branch, client: driver.client, createdBy: req.userId },
       { new: true, upsert: true }
     ).lean();
 

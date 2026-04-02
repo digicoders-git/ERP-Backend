@@ -70,6 +70,14 @@ const branchSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  latitude: {
+    type: Number,
+    default: null
+  },
+  longitude: {
+    type: Number,
+    default: null
+  },
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',
