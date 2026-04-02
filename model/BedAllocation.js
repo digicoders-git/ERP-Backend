@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bedAllocationSchema = new mongoose.Schema({
   roomId: { type: String, required: true },
   roomNumber: { type: String, required: true },
-  bedNumber: { type: Number, required: true },
+  bedNumber: { type: String, required: true },
   studentId: { type: String, required: true },
   studentName: { type: String, required: true },
   allocatedDate: { type: String, required: true },
