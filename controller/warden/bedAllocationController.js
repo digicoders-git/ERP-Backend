@@ -18,15 +18,34 @@ exports.getAll = async (req, res) => {
 exports.allocate = async (req, res) => {
   try {
     const { roomId, bedNumber, studentId } = req.body;
+    if (!roomId || !bedNumber || !studentId) return errorResponse(res, 'roomId, bedNumber and studentId required', 400);
+
+    // Fetch room and student by ID
+    const Room = require('../../model/Room');
+    const Student = require('../../model/Student');
+
+    const [room, student] = await Promise.all([
+      Room.findById(roomId).lean(),
+      Student.findById(studentId).lean()
+    ]);
+
+    if (!room) return errorResponse(res, 'Room not found', 404);
+    if (!student) return errorResponse(res, 'Student not found', 404);
+
     // Check if bed already occupied
     const existing = await BedAllocation.findOne({ roomId, bedNumber, status: 'active' });
     if (existing) return errorResponse(res, 'Bed already occupied', 400);
+
     // Check if student already has a bed
     const studentBed = await BedAllocation.findOne({ studentId, status: 'active' });
-    if (studentBed) return errorResponse(res, 'Student already allocated to a bed', 400);
+    if (studentBed) return errorResponse(res, `Student already allocated to bed ${studentBed.bedNumber} in room ${studentBed.roomNumber}`, 400);
 
     const allocation = new BedAllocation({
-      ...req.body,
+      roomId,
+      bedNumber,
+      studentId,
+      roomNumber: room.roomNo,
+      studentName: `${student.firstName} ${student.lastName}`,
       allocatedDate: req.body.allocatedDate || new Date().toISOString().split('T')[0]
     });
     await allocation.save();

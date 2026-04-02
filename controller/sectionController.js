@@ -22,6 +22,12 @@ exports.createSection = async (req, res) => {
       return res.status(403).json({ message: 'Class does not belong to your branch' });
     }
 
+    // Same section name same class mein already hai?
+    const duplicate = await Section.findOne({ sectionName, assignToClass, branch: admin.branch });
+    if (duplicate) {
+      return res.status(400).json({ message: `Section '${sectionName}' already exists in this class` });
+    }
+
     const newSection = new Section({
       sectionName,
       assignToClass,
@@ -169,6 +175,14 @@ exports.updateSection = async (req, res) => {
         return res.status(403).json({ message: 'Class does not belong to your branch' });
       }
       section.assignToClass = assignToClass;
+    }
+
+    // Duplicate check on update
+    const targetClass = assignToClass || section.assignToClass.toString();
+    const targetName = sectionName || section.sectionName;
+    const duplicate = await Section.findOne({ sectionName: targetName, assignToClass: targetClass, branch: admin.branch, _id: { $ne: id } });
+    if (duplicate) {
+      return res.status(400).json({ message: `Section '${targetName}' already exists in this class` });
     }
 
     if (sectionName) section.sectionName = sectionName;

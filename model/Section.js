@@ -37,4 +37,7 @@ const sectionSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Same section name same class mein dobara nahi ban sakti (branch level pe)
+sectionSchema.index({ sectionName: 1, assignToClass: 1, branch: 1 }, { unique: true });
+
 module.exports = mongoose.model('Section', sectionSchema);
