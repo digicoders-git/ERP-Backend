@@ -22,6 +22,12 @@ exports.allocateHostel = async (req, res) => {
       return res.status(403).json({ message: 'Hostel does not belong to your branch' });
     }
 
+    // Check: student ka already active allocation hai?
+    const existingAllocation = await HostelAllocation.findOne({ studentId, allocationStatus: 'allocated' });
+    if (existingAllocation) {
+      return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo} in this hostel` });
+    }
+
     const newAllocation = new HostelAllocation({
       studentId,
       studentName,
@@ -184,6 +190,15 @@ exports.updateAllocation = async (req, res) => {
     if (studentId) allocation.studentId = studentId;
     if (studentName) allocation.studentName = studentName;
     if (roomNo) allocation.roomNo = roomNo;
+
+    // Agar studentId change ho raha hai to check karo naya student already allocated to nahi
+    if (studentId && studentId !== allocation.studentId) {
+      const existingAllocation = await HostelAllocation.findOne({ studentId, allocationStatus: 'allocated', _id: { $ne: id } });
+      if (existingAllocation) {
+        return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo}` });
+      }
+    }
+
     if (joiningDate) allocation.joiningDate = joiningDate;
     if (monthlyRent !== undefined) allocation.monthlyRent = monthlyRent;
     if (securityDeposit !== undefined) allocation.securityDeposit = securityDeposit;

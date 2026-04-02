@@ -61,4 +61,7 @@ const hostelAllocationSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Ek student ka ek hi active allocation ho sakta hai
+hostelAllocationSchema.index({ studentId: 1, allocationStatus: 1 });
+
 module.exports = mongoose.model('HostelAllocation', hostelAllocationSchema);
