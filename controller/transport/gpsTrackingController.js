@@ -115,11 +115,13 @@ exports.trackStudentVehicle = async (req, res) => {
 
     if (!allocation) return res.status(404).json({ message: 'No transport allocated for this student' });
 
-    const assignment = await TransportAssignment.findOne({
-      vehicle: allocation.vehicle._id, status: true
-    }).populate('driver', 'name mobileNo').lean();
+    // Try assignment first, fallback to direct driver lookup via any active assignment for this vehicle
+    const [assignment, loc] = await Promise.all([
+      TransportAssignment.findOne({ vehicle: allocation.vehicle._id, status: true })
+        .populate('driver', 'name mobileNo').lean(),
+      VehicleLocation.findOne({ vehicle: allocation.vehicle._id }).lean()
+    ]);
 
-    const loc = await VehicleLocation.findOne({ vehicle: allocation.vehicle._id }).lean();
     const isOnline = loc && (new Date() - new Date(loc.recordedAt)) / 60000 < 5;
 
     return res.status(200).json({
@@ -127,8 +129,9 @@ exports.trackStudentVehicle = async (req, res) => {
       data: {
         vehicle: { id: allocation.vehicle._id, vehicleNo: allocation.vehicle.vehicleNo, type: allocation.vehicle.vehicleType },
         driver: assignment?.driver ? { name: assignment.driver.name, mobile: assignment.driver.mobileNo } : null,
+        assignmentFound: !!assignment,
         route: { name: allocation.route?.routeName },
-        location: isOnline ? loc : null,
+        location: isOnline ? { latitude: loc.latitude, longitude: loc.longitude, speed: loc.speed, status: loc.status, updatedAt: loc.recordedAt } : null,
         status: isOnline ? 'online' : 'offline'
       }
     });
@@ -172,30 +175,42 @@ exports.getTripHistory = async (req, res) => {
   }
 };
 
-// Geofence check — uses branch location dynamically
+// Geofence check — uses branch location or manual coordinates
 exports.checkGeofence = async (req, res) => {
   try {
-    const { vehicleId, latitude, longitude, radiusKm = 2 } = req.body;
+    const { vehicleId, latitude, longitude, radiusKm = 2, schoolLat, schoolLng } = req.body;
     if (!vehicleId || !latitude || !longitude) {
       return res.status(400).json({ message: 'vehicleId, latitude and longitude are required' });
     }
 
-    const vehicle = await Vehicle.findById(vehicleId).populate('branch', 'latitude longitude branchName').lean();
-    if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+    let centerLat = schoolLat;
+    let centerLng = schoolLng;
+    let branchName = 'Manual';
 
-    const branch = vehicle.branch;
-    if (!branch?.latitude || !branch?.longitude) {
-      return res.status(400).json({ message: 'Branch coordinates not set. Update branch with latitude and longitude.' });
+    // If manual coords not provided, fetch from branch
+    if (!centerLat || !centerLng) {
+      const vehicle = await Vehicle.findById(vehicleId).populate('branch', 'latitude longitude branchName').lean();
+      if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
+      centerLat = vehicle.branch?.latitude;
+      centerLng = vehicle.branch?.longitude;
+      branchName = vehicle.branch?.branchName || 'Branch';
     }
 
-    const distance = calculateDistance(parseFloat(latitude), parseFloat(longitude), branch.latitude, branch.longitude);
+    if (!centerLat || !centerLng) {
+      return res.status(400).json({
+        message: 'School coordinates not available. Pass schoolLat & schoolLng in body, or update branch with latitude/longitude.',
+        hint: 'PUT /api/branch/update/:branchId  body: { latitude: 28.7041, longitude: 77.1025 }'
+      });
+    }
+
+    const distance = calculateDistance(parseFloat(latitude), parseFloat(longitude), parseFloat(centerLat), parseFloat(centerLng));
     const isWithin = distance <= radiusKm;
 
     return res.status(200).json({
       success: true,
       data: {
         vehicleId,
-        branchName: branch.branchName,
+        branchName,
         isWithinGeofence: isWithin,
         distanceKm: parseFloat(distance.toFixed(2)),
         radiusKm,
