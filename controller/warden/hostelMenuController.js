@@ -1,30 +1,30 @@
 const HostelMenu = require('../../model/HostelMenu');
-const Admin = require('../../model/Admin');
+const Warden = require('../../model/Warden');
 
 // Add Menu
 exports.addMenu = async (req, res) => {
   try {
     const { day, breakfast, lunch, dinner } = req.body;
-    const adminId = req.userId;
+    const wardenId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'wardenAdmin') {
-      return res.status(403).json({ message: 'Only warden admin can add menu' });
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(403).json({ message: 'Warden not found' });
     }
 
-    const existingMenu = await HostelMenu.findOne({ day, branch: admin.branch });
+    const existingMenu = await HostelMenu.findOne({ day, branch: warden.branch });
     if (existingMenu) {
       return res.status(400).json({ message: 'Menu already exists for this day' });
     }
 
     const menu = new HostelMenu({
-      day ,
+      day,
       breakfast,
       lunch,
       dinner,
-      branch: admin.branch,
-      client: admin.client,
-      createdBy: adminId
+      branch: warden.branch,
+      client: warden.client,
+      createdBy: wardenId
     });
 
     await menu.save();
@@ -37,15 +37,14 @@ exports.addMenu = async (req, res) => {
 // Get All Menus
 exports.getAllMenus = async (req, res) => {
   try {
-    const adminId = req.userId;
+    const wardenId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'wardenAdmin') {
-      return res.status(403).json({ message: 'Only warden admin can view menus' });
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(403).json({ message: 'Warden not found' });
     }
 
-    const menus = await HostelMenu.find({ branch: admin.branch })
-      .populate('createdBy', 'email role')
+    const menus = await HostelMenu.find({ branch: warden.branch })
       .sort({ day: 1 });
 
     res.status(200).json({ menus });
@@ -58,16 +57,14 @@ exports.getAllMenus = async (req, res) => {
 exports.getMenuByDay = async (req, res) => {
   try {
     const { day } = req.params;
-    const adminId = req.userId;
+    const wardenId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'wardenAdmin') {
-      return res.status(403).json({ message: 'Only warden admin can view menu' });
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(403).json({ message: 'Warden not found' });
     }
 
-    const menu = await HostelMenu.findOne({ day, branch: admin.branch })
-      .populate('createdBy', 'email role');
-
+    const menu = await HostelMenu.findOne({ day, branch: warden.branch });
     if (!menu) {
       return res.status(404).json({ message: 'Menu not found for this day' });
     }
@@ -83,11 +80,11 @@ exports.updateMenu = async (req, res) => {
   try {
     const { id } = req.params;
     const { breakfast, lunch, dinner } = req.body;
-    const adminId = req.userId;
+    const wardenId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'wardenAdmin') {
-      return res.status(403).json({ message: 'Only warden admin can update menu' });
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(403).json({ message: 'Warden not found' });
     }
 
     const menu = await HostelMenu.findById(id);
@@ -95,7 +92,7 @@ exports.updateMenu = async (req, res) => {
       return res.status(404).json({ message: 'Menu not found' });
     }
 
-    if (menu.branch.toString() !== admin.branch.toString()) {
+    if (menu.branch.toString() !== warden.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -114,11 +111,11 @@ exports.updateMenu = async (req, res) => {
 exports.deleteMenu = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const wardenId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'wardenAdmin') {
-      return res.status(403).json({ message: 'Only warden admin can delete menu' });
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(403).json({ message: 'Warden not found' });
     }
 
     const menu = await HostelMenu.findById(id);
@@ -126,7 +123,7 @@ exports.deleteMenu = async (req, res) => {
       return res.status(404).json({ message: 'Menu not found' });
     }
 
-    if (menu.branch.toString() !== admin.branch.toString()) {
+    if (menu.branch.toString() !== warden.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
