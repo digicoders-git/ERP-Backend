@@ -3,10 +3,16 @@ const FeeMapping = require('../model/FeeMapping');
 const Fee = require('../model/Fee');
 const Class = require('../model/Class');
 const Admin = require('../model/Admin');
+const Staff = require('../model/Staff');
 
 const getBranch = async (userId) => {
-  const admin = await Admin.findById(userId).select('branch').lean();
-  return admin?.branch || null;
+  // Try Admin first
+  let user = await Admin.findById(userId).select('branch').lean();
+  if (user?.branch) return user.branch;
+  
+  // Try Staff if not found in Admin
+  user = await Staff.findById(userId).select('branch').lean();
+  return user?.branch || null;
 };
 
 // Get Fee Reports (fast parallel aggregation)

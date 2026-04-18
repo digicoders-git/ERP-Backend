@@ -1,85 +1,88 @@
 const Student = require('../../model/Student');
-const Admin = require('../../model/Admin');
-const Fee = require('../../model/Fee');
+const Teacher = require('../../model/Teacher');
+const Staff = require('../../model/Staff');
+const Class = require('../../model/Class');
+const Section = require('../../model/Section');
+const FeeCollection = require('../../model/FeeCollection');
 const Event = require('../../model/Event');
 const Leave = require('../../model/Leave');
 const Attendance = require('../../model/Attendance');
+const Approval = require('../../model/Approval');
+const Hostel = require('../../model/Hostel');
+const HostelAllocation = require('../../model/HostelAllocation');
+const Vehicle = require('../../model/Vehicle');
+const Route = require('../../model/Route');
+const mongoose = require('mongoose');
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.userId).lean();
-    const branchId = admin.branch;
+    const staff = await Staff.findById(req.userId).lean();
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
+    
+    const branchId = staff.branch;
+    const clientId = staff.client;
 
-    // Parallel queries for faster response
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
     const [
       totalStudents,
       newAdmissions,
-      todayAttendance,
-      pendingLeaves,
-      upcomingEvents,
-      monthlyFeeCollection,
-      recentActivities
+      feeCollectionRes,
+      recentStudents,
+      upcomingEvents
     ] = await Promise.all([
-      Student.countDocuments({ branch: branchId, status: 'active' }),
-      Student.countDocuments({ 
-        branch: branchId, 
-        createdAt: { $gte: new Date(new Date().setDate(new Date().getDate() - 30)) }
-      }),
-      Attendance.countDocuments({ 
-        branch: branchId, 
-        date: new Date().toISOString().split('T')[0],
-        status: 'present'
-      }),
-      Leave.countDocuments({ branch: branchId, status: 'pending' }),
-      Event.find({ branch: branchId, date: { $gte: new Date() } })
-        .sort({ date: 1 })
-        .limit(5)
-        .select('title date type')
-        .lean(),
-      Fee.aggregate([
+      Student.countDocuments({ branch: new mongoose.Types.ObjectId(branchId) }),
+      Student.countDocuments({ branch: new mongoose.Types.ObjectId(branchId), createdAt: { $gte: thirtyDaysAgo } }),
+      FeeCollection.aggregate([
         { 
           $match: { 
-            branch: branchId,
-            createdAt: { 
+            branch: new mongoose.Types.ObjectId(branchId),
+            paymentDate: { 
               $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) 
             }
           }
         },
         { $group: { _id: null, total: { $sum: '$amountPaid' } } }
       ]),
-      Student.find({ branch: branchId })
+      Student.find({ branch: new mongoose.Types.ObjectId(branchId) })
         .sort({ createdAt: -1 })
-        .limit(10)
-        .select('name admissionNumber createdAt')
+        .limit(5)
+        .select('firstName lastName createdAt')
+        .lean(),
+      Event.find({ branch: new mongoose.Types.ObjectId(branchId), date: { $gte: new Date() } })
+        .sort({ date: 1 })
+        .limit(5)
+        .select('title date type')
         .lean()
     ]);
 
-    const feeCollection = monthlyFeeCollection[0]?.total || 0;
+    const feeCollection = feeCollectionRes[0]?.total || 0;
+
+    // Generate recent activities based on recent students and upcoming events
+    const recentActivities = [
+      ...recentStudents.map(s => ({
+        activity: `New Admission: ${s.firstName} ${s.lastName}`,
+        time: new Date(s.createdAt).toLocaleDateString() === new Date().toLocaleDateString() ? 'Today' : new Date(s.createdAt).toLocaleDateString()
+      })),
+      ...upcomingEvents.map(e => ({
+        activity: `Upcoming Event: ${e.title}`,
+        time: new Date(e.date).toLocaleDateString()
+      }))
+    ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 10);
 
     res.status(200).json({
       stats: {
         totalStudents,
         newAdmissions,
-        todayAttendance,
-        pendingLeaves,
-        feeCollection: `₹${(feeCollection / 100000).toFixed(1)}L`
+        feeCollection: `₹${feeCollection.toLocaleString()}`
       },
-      upcomingEvents,
-      recentActivities: recentActivities.map(s => ({
-        activity: `New admission: ${s.name}`,
-        time: getTimeAgo(s.createdAt),
-        type: 'admission'
-      }))
+      recentActivities
     });
   } catch (error) {
+    console.error('Dashboard error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
-
-function getTimeAgo(date) {
-  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-}

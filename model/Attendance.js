@@ -10,7 +10,7 @@ const attendanceSchema = new mongoose.Schema({
   sectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
   // For staff attendance
   staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
-  status: { type: String, enum: ['present', 'absent', 'late', 'half-day'], required: true },
+  status: { type: String, enum: ['present', 'absent', 'late', 'half-day', 'leave'], required: true },
   remark: { type: String, trim: true },
   markedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' }
 }, { timestamps: true });

@@ -12,14 +12,36 @@ const staffSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  password: {
+    type: String,
+    default: '12345678'
+  },
   mobile: {
     type: String,
     required: true,
     trim: true
   },
+  staffId: {
+    type: String,
+    unique: true,
+    trim: true
+  },
   profileImage: {
     type: String,
     default: null
+  },
+  designation: {
+    type: String,
+    trim: true
+  },
+  department: {
+    type: String,
+    trim: true
+  },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other'],
+    trim: true
   },
   qualification: {
     type: String,

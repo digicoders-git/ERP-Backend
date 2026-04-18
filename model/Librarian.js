@@ -30,10 +30,32 @@ const librarianSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  profileImage: {
+    type: String,
+    default: null
+  },
   qualification: {
     type: String,
-    enum: ['B.Lib', 'M.Lib', 'B.A', 'M.A'],
-    default: 'B.Lib'
+    trim: true
+  },
+  salary: {
+    type: Number,
+    default: 0
+  },
+  address: {
+    type: String,
+    trim: true
+  },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other'],
+  },
+  dob: {
+    type: Date
+  },
+  experience: {
+    type: String,
+    trim: true
   },
   joinDate: {
     type: Date,

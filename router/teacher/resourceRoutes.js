@@ -2,12 +2,12 @@ const express = require('express');
 const router = express.Router();
 const resourceController = require('../../controller/teacher/resourceController');
 const auth = require('../../middleware/auth');
-const uploadResource = require('../../middleware/uploadResource');
+const { uploadResource, setResourceHeaders, cloudinaryUpload } = require('../../middleware/uploadResource');
 
-router.post('/upload', auth, uploadResource.single('file'), resourceController.uploadResource);
-router.get('/all', auth, resourceController.getAllResources);
+router.post('/', auth, setResourceHeaders, uploadResource.single('file'), cloudinaryUpload, resourceController.uploadResource);
+router.get('/', auth, resourceController.getAllResources);
 router.get('/:id', auth, resourceController.getResourceById);
-router.put('/:id', auth, uploadResource.single('file'), resourceController.updateResource);
+router.put('/:id', auth, setResourceHeaders, uploadResource.single('file'), cloudinaryUpload, resourceController.updateResource);
 router.delete('/:id', auth, resourceController.deleteResource);
 
 module.exports = router;

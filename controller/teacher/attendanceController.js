@@ -1,5 +1,8 @@
 const Attendance = require('../../model/Attendance');
+const TeacherAttendance = require('../../model/TeacherAttendance');
 const Student = require('../../model/Student');
+const Admin = require('../../model/Admin');
+const Teacher = require('../../model/Teacher');
 const { Types: { ObjectId } } = require('mongoose');
 
 const toObjId = (val) => {
@@ -9,20 +12,121 @@ const toObjId = (val) => {
 };
 
 // IST fix: date string "2025-07-25" ko UTC range mein convert karo
-// IST = UTC+5:30, so "2025-07-25" IST = "2025-07-24T18:30:00Z" to "2025-07-25T18:29:59Z"
 const dateToUTCRange = (dateStr) => {
-  // Parse date string as IST (UTC+5:30)
-  // "2025-07-25" IST 00:00 = 2025-07-24T18:30:00Z
-  // "2025-07-25" IST 23:59 = 2025-07-25T18:29:59Z
   const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-  const d = new Date(dateStr); // parsed as UTC midnight
-  // Convert to IST start of day in UTC
+  const d = new Date(dateStr);
   const start = new Date(d.getTime() - IST_OFFSET_MS);
-  // End = start + 24 hours - 1ms
   const end = new Date(start.getTime() + (24 * 60 * 60 * 1000) - 1);
-
   return { start, end };
+};
+
+exports.getStudentsByClass = async (req, res) => {
+  try {
+    const { classId, sectionId } = req.query;
+
+    if (!classId || !sectionId) {
+      return res.status(400).json({ success: false, message: 'Class and section are required' });
+    }
+
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
+    const branchId = admin.branch;
+    const classObjId = toObjId(classId);
+    const sectionObjId = toObjId(sectionId);
+
+    if (!classObjId || !sectionObjId) {
+      return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
+    }
+
+    const students = await Student.find({
+      branch: branchId,
+      class: classObjId,
+      section: sectionObjId,
+      status: 'active'
+    })
+      .select('firstName lastName rollNumber')
+      .sort({ rollNumber: 1 })
+      .lean();
+
+    const formattedStudents = students.map(s => ({
+      studentId: s._id,
+      name: `${s.firstName} ${s.lastName}`,
+      rollNo: s.rollNumber
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: formattedStudents,
+      totalStudents: students.length
+    });
+  } catch (error) {
+    console.error('Get students by class error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch students', error: error.message });
+  }
+};
+
+exports.getTeacherAttendance = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const adminId = req.userId;
+
+    console.log('=== Get Teacher Attendance ===');
+    console.log('adminId:', adminId);
+    console.log('startDate:', startDate);
+    console.log('endDate:', endDate);
+
+    // Get admin details
+    const admin = await Admin.findById(adminId).select('branch teacher').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
+    console.log('admin:', admin);
+
+    const teacherId = admin.teacher;
+
+    // Get teacher details
+    const teacher = await Teacher.findById(teacherId).select('name').lean();
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Teacher not found' });
+    }
+
+    console.log('teacher:', teacher);
+    console.log('teacherName:', teacher.name);
+
+    let query = {
+      teacherName: teacher.name
+    };
+
+    if (startDate && endDate) {
+      const { start } = dateToUTCRange(startDate);
+      const { end } = dateToUTCRange(endDate);
+      query.date = { $gte: start, $lte: end };
+      console.log('Date range:', { start, end });
+    }
+
+    console.log('Query:', query);
+
+    const attendance = await TeacherAttendance.find(query)
+      .sort({ date: -1 })
+      .lean();
+
+    console.log('Attendance records found:', attendance.length);
+
+    res.status(200).json({
+      success: true,
+      data: attendance,
+      total: attendance.length,
+      teacher: teacher.name
+    });
+  } catch (error) {
+    console.error('Get teacher attendance error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch teacher attendance', error: error.message });
+  }
 };
 
 exports.markAttendance = async (req, res) => {
@@ -33,11 +137,20 @@ exports.markAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Date, class, section, and attendanceData array are required' });
     }
 
-    const { start: queryDate } = dateToUTCRange(date);
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
 
-    const branchId = toObjId(req.user.branch);
+    const { start: queryDate } = dateToUTCRange(date);
+    const branchId = admin.branch;
     const classObjId = toObjId(classId);
     const sectionObjId = toObjId(sectionId);
+
+    if (!classObjId || !sectionObjId) {
+      return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
+    }
 
     const bulkOps = attendanceData.map(item => ({
       updateOne: {
@@ -49,7 +162,13 @@ exports.markAttendance = async (req, res) => {
           sectionId: sectionObjId,
           type: 'student'
         },
-        update: { $set: { status: item.status.toLowerCase(), remark: item.remark || '', markedBy: toObjId(req.userId) } },
+        update: { 
+          $set: { 
+            status: item.status.toLowerCase(), 
+            remark: item.remark || '', 
+            markedBy: req.userId 
+          } 
+        },
         upsert: true
       }
     }));
@@ -70,9 +189,19 @@ exports.getAttendanceByClass = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Class and section are required' });
     }
 
-    const branchId = toObjId(req.user.branch);
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
+    const branchId = admin.branch;
     const classObjId = toObjId(classId);
     const sectionObjId = toObjId(sectionId);
+
+    if (!classObjId || !sectionObjId) {
+      return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
+    }
 
     let rangeStart, rangeEnd, displayDate;
 
@@ -82,7 +211,6 @@ exports.getAttendanceByClass = async (req, res) => {
       rangeEnd = range.end;
       displayDate = date;
     } else {
-      // Latest attendance date dhundo
       const latestAtt = await Attendance.findOne(
         { classId: classObjId, sectionId: sectionObjId, type: 'student' },
         { date: 1 },
@@ -90,12 +218,10 @@ exports.getAttendanceByClass = async (req, res) => {
       ).lean();
 
       if (latestAtt) {
-        // DB mein jo date hai uske aas paas ka full day range
         rangeStart = new Date(latestAtt.date);
         rangeStart.setUTCHours(0, 0, 0, 0);
         rangeEnd = new Date(latestAtt.date);
         rangeEnd.setUTCHours(23, 59, 59, 999);
-        // Display date IST mein
         const istDate = new Date(latestAtt.date.getTime() + (5.5 * 60 * 60 * 1000));
         displayDate = istDate.toISOString().split('T')[0];
       } else {
@@ -109,7 +235,9 @@ exports.getAttendanceByClass = async (req, res) => {
 
     const [students, attendanceRecords] = await Promise.all([
       Student.find({ branch: branchId, class: classObjId, section: sectionObjId, status: 'active' })
-        .select('firstName lastName rollNumber').lean(),
+        .select('firstName lastName rollNumber')
+        .sort({ rollNumber: 1 })
+        .lean(),
       Attendance.find({
         branch: branchId,
         classId: classObjId,
@@ -125,7 +253,6 @@ exports.getAttendanceByClass = async (req, res) => {
     });
 
     const result = students.map(s => ({
-      id: s._id,
       studentId: s._id,
       name: `${s.firstName} ${s.lastName}`,
       rollNo: s.rollNumber,
@@ -150,10 +277,13 @@ exports.getAttendanceStats = async (req, res) => {
   try {
     const { classId, sectionId, startDate, endDate } = req.query;
 
-    const matchQuery = { type: 'student' };
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
 
-    const branchId = toObjId(req.user.branch);
-    if (branchId) matchQuery.branch = branchId;
+    const matchQuery = { type: 'student', branch: admin.branch };
 
     const classObjId = toObjId(classId);
     if (classObjId) matchQuery.classId = classObjId;
@@ -172,8 +302,8 @@ exports.getAttendanceStats = async (req, res) => {
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
-    const statsMap = { present: 0, absent: 0, late: 0, 'half-day': 0 };
-    stats.forEach(i => { statsMap[i._id] = i.count; });
+    const statsMap = { present: 0, absent: 0, late: 0, 'half-day': 0, leave: 0 };
+    stats.forEach(i => { if (statsMap[i._id] !== undefined) statsMap[i._id] = i.count; });
     const total = stats.reduce((s, i) => s + i.count, 0);
 
     res.status(200).json({
@@ -184,6 +314,7 @@ exports.getAttendanceStats = async (req, res) => {
         absent: statsMap.absent,
         late: statsMap.late,
         halfDay: statsMap['half-day'],
+        leave: statsMap.leave,
         attendanceRate: total > 0 ? Math.round((statsMap.present / total) * 100) : 0
       }
     });
@@ -198,8 +329,14 @@ exports.getStudentAttendance = async (req, res) => {
     const { studentId } = req.params;
     const { startDate, endDate } = req.query;
 
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
     const query = {
-      branch: toObjId(req.user.branch),
+      branch: admin.branch,
       studentId: toObjId(studentId),
       type: 'student'
     };
@@ -212,7 +349,7 @@ exports.getStudentAttendance = async (req, res) => {
 
     const attendance = await Attendance.find(query).sort({ date: -1 }).limit(100).lean();
 
-    const stats = { total: attendance.length, present: 0, absent: 0, late: 0 };
+    const stats = { total: attendance.length, present: 0, absent: 0, late: 0, leave: 0 };
     attendance.forEach(a => { if (stats[a.status] !== undefined) stats[a.status]++; });
     stats.attendanceRate = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
 
@@ -231,10 +368,20 @@ exports.bulkUpdateAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Date, class, section, and status are required' });
     }
 
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
     const { start: queryDate } = dateToUTCRange(date);
-    const branchId = toObjId(req.user.branch);
+    const branchId = admin.branch;
     const classObjId = toObjId(classId);
     const sectionObjId = toObjId(sectionId);
+
+    if (!classObjId || !sectionObjId) {
+      return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
+    }
 
     const students = await Student.find({ branch: branchId, class: classObjId, section: sectionObjId, status: 'active' })
       .select('_id').lean();
@@ -246,15 +393,17 @@ exports.bulkUpdateAttendance = async (req, res) => {
     const bulkOps = students.map(s => ({
       updateOne: {
         filter: { branch: branchId, date: queryDate, studentId: s._id, classId: classObjId, sectionId: sectionObjId, type: 'student' },
-        update: { $set: { status: status.toLowerCase(), markedBy: toObjId(req.userId) } },
+        update: { $set: { status: status.toLowerCase(), markedBy: req.userId } },
         upsert: true
       }
     }));
 
     const result = await Attendance.bulkWrite(bulkOps);
     res.status(200).json({
-      success: true, message: 'Bulk attendance updated successfully',
-      modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount
+      success: true, 
+      message: 'Bulk attendance updated successfully',
+      modifiedCount: result.modifiedCount, 
+      upsertedCount: result.upsertedCount
     });
   } catch (error) {
     console.error('Bulk update attendance error:', error);
@@ -270,15 +419,27 @@ exports.getAttendanceReport = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Class, section, startDate, and endDate are required' });
     }
 
-    const branchId = toObjId(req.user.branch);
+    // Get admin's branch
+    const admin = await Admin.findById(req.userId).select('branch').lean();
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
+    const branchId = admin.branch;
     const classObjId = toObjId(classId);
     const sectionObjId = toObjId(sectionId);
+
+    if (!classObjId || !sectionObjId) {
+      return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
+    }
+
     const { start } = dateToUTCRange(startDate);
     const { end } = dateToUTCRange(endDate);
 
     const [students, attendance] = await Promise.all([
       Student.find({ branch: branchId, class: classObjId, section: sectionObjId, status: 'active' })
-        .select('firstName lastName rollNumber').lean(),
+        .select('firstName lastName rollNumber')
+        .lean(),
       Attendance.find({
         branch: branchId, classId: classObjId, sectionId: sectionObjId, type: 'student',
         date: { $gte: start, $lte: end }

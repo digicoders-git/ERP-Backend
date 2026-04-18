@@ -22,6 +22,10 @@ const classSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  stream: {
+    type: [String],
+    default: null
+  },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Branch',
@@ -36,6 +40,11 @@ const classSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin',
     required: true
+  },
+  classTeacher: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Teacher',
+    default: null
   }
 }, { timestamps: true });
 

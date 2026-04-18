@@ -4,7 +4,7 @@ const Admin = require('../../model/Admin');
 // Upload Video Class
 exports.uploadVideoClass = async (req, res) => {
   try {
-    const { title, subject, duration, thumbnailUrl, videoUrl } = req.body;
+    const { title, subject, duration, thumbnailUrl, videoUrl, classId, sectionId } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
@@ -18,6 +18,8 @@ exports.uploadVideoClass = async (req, res) => {
       duration,
       thumbnailUrl,
       videoUrl,
+      class: classId,
+      section: sectionId,
       branch: admin.branch,
       client: admin.client,
       createdBy: adminId
@@ -33,7 +35,7 @@ exports.uploadVideoClass = async (req, res) => {
 // Get All Video Classes
 exports.getAllVideoClasses = async (req, res) => {
   try {
-    const { page = 1, limit = 10, subject } = req.query;
+    const { page = 1, limit = 10, subject, classId, sectionId } = req.query;
     const skip = (page - 1) * limit;
     const adminId = req.userId;
 
@@ -42,11 +44,15 @@ exports.getAllVideoClasses = async (req, res) => {
       return res.status(403).json({ message: 'Only teacher admin can view video classes' });
     }
 
-    const searchQuery = { branch: admin.branch };
+    const searchQuery = { branch: admin.branch, createdBy: adminId };
     if (subject) searchQuery.subject = { $regex: subject, $options: 'i' };
+    if (classId) searchQuery.class = classId;
+    if (sectionId) searchQuery.section = sectionId;
 
     const videoClasses = await VideoClass.find(searchQuery)
       .populate('createdBy', 'email role')
+      .populate('class', 'className')
+      .populate('section', 'sectionName')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -100,7 +106,7 @@ exports.getVideoClassById = async (req, res) => {
 exports.updateVideoClass = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, subject, duration, thumbnailUrl, videoUrl } = req.body;
+    const { title, subject, duration, thumbnailUrl, videoUrl, classId, sectionId } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
@@ -122,6 +128,8 @@ exports.updateVideoClass = async (req, res) => {
     if (duration) videoClass.duration = duration;
     if (thumbnailUrl) videoClass.thumbnailUrl = thumbnailUrl;
     if (videoUrl) videoClass.videoUrl = videoUrl;
+    if (classId) videoClass.class = classId;
+    if (sectionId) videoClass.section = sectionId;
 
     await videoClass.save();
     res.status(200).json({ message: 'Video class updated successfully', videoClass });

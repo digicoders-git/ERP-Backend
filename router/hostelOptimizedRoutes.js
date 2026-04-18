@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const hostelController = require('../controller/hostelOptimizedController');
-const auth = require('../middleware/auth');
+const auth = require('../middleware/flexibleAuth');
 
 router.get('/stats', auth, hostelController.getHostelStats);
 router.get('/hostels', auth, hostelController.getHostels);

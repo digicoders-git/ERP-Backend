@@ -1,6 +1,7 @@
 const Fee = require('../../model/Fee');
 const FeeCollection = require('../../model/FeeCollection');
 const Student = require('../../model/Student');
+const mongoose = require('mongoose');
 
 exports.getFeeStats = async (req, res) => {
   try {
@@ -54,15 +55,18 @@ exports.getPendingFees = async (req, res) => {
   try {
     const { branch, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const matchQ = adminBranch
+      ? { branch: adminBranch, status: 'pending' }
+      : branch
+      ? { branch: new mongoose.Types.ObjectId(branch), status: 'pending' }
+      : adminClient
+      ? { client: adminClient, status: 'pending' }
+      : { status: 'pending' };
 
     const pendingFees = await FeeCollection.aggregate([
-      {
-        $match: {
-          branch: adminBranch || branch,
-          status: 'pending'
-        }
-      },
+      { $match: matchQ },
       {
         $lookup: {
           from: 'students',
@@ -88,10 +92,7 @@ exports.getPendingFees = async (req, res) => {
       { $limit: parseInt(limit) }
     ]);
 
-    const total = await FeeCollection.countDocuments({
-      branch: adminBranch || branch,
-      status: 'pending'
-    });
+    const total = await FeeCollection.countDocuments(matchQ);
 
     res.status(200).json({
       success: true,
@@ -195,11 +196,13 @@ exports.recordFeePayment = async (req, res) => {
 
 exports.getFeeDashboard = async (req, res) => {
   try {
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const matchQ = adminBranch ? { branch: adminBranch } : adminClient ? { client: adminClient } : {};
 
     const [stats, recentPayments, pendingCount, monthlyTrend] = await Promise.all([
       FeeCollection.aggregate([
-        { $match: { branch: adminBranch } },
+        { $match: matchQ },
         {
           $facet: {
             totalCollection: [
@@ -216,14 +219,14 @@ exports.getFeeDashboard = async (req, res) => {
           }
         }
       ]),
-      FeeCollection.find({ branch: adminBranch, status: 'paid' })
+      FeeCollection.find({ ...matchQ, status: 'paid' })
         .select('amount createdAt')
         .sort({ createdAt: -1 })
         .limit(5)
         .lean(),
-      FeeCollection.countDocuments({ branch: adminBranch, status: 'pending' }),
+      FeeCollection.countDocuments({ ...matchQ, status: 'pending' }),
       FeeCollection.aggregate([
-        { $match: { branch: adminBranch } },
+        { $match: matchQ },
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },

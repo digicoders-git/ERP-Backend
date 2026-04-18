@@ -1,7 +1,8 @@
 const FeeCollection = require('../../model/FeeCollection');
 const Student = require('../../model/Student');
-const FeeStructure = require('../../model/FeeStructure');
-const Admin = require('../../model/Admin');
+const FeeMapping = require('../../model/FeeMapping');
+const Fee = require('../../model/Fee');
+const Staff = require('../../model/Staff');
 
 // Collect Fee
 exports.collectFee = async (req, res) => {
@@ -18,16 +19,37 @@ exports.collectFee = async (req, res) => {
       remarks 
     } = req.body;
 
-    const admin = await Admin.findById(req.userId).lean();
+    const staff = await Staff.findById(req.userId).lean();
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
 
-    const student = await Student.findById(studentId).lean();
-    if (!student || student.branch.toString() !== admin.branch.toString()) {
-      return res.status(404).json({ message: 'Student not found' });
+    const mongoose = require('mongoose');
+
+    let targetStudentId = studentId;
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      const studentByAdm = await Student.findOne({ 
+        admissionNumber: studentId, 
+        branch: staff.branch 
+      }).select('_id');
+      
+      if (!studentByAdm) {
+        return res.status(404).json({ message: 'Student Identity not found in Registry.' });
+      }
+      targetStudentId = studentByAdm._id;
+    }
+
+    const student = await Student.findById(targetStudentId).lean();
+    if (!student || student.branch.toString() !== staff.branch.toString()) {
+      return res.status(404).json({ message: 'Student not found or access denied.' });
     }
 
     const balance = amount - amountPaid;
     let status = 'pending';
     
+    let normalizedPaymentMode = paymentMode;
+    if (paymentMode === 'Common Service Point') normalizedPaymentMode = 'Online';
+
     if (amountPaid === 0) {
       status = 'pending';
     } else if (amountPaid >= amount) {
@@ -37,14 +59,14 @@ exports.collectFee = async (req, res) => {
     }
 
     const fee = new FeeCollection({
-      student: studentId,
-      branch: admin.branch,
-      client: admin.client,
+      student: targetStudentId,
+      branch: staff.branch,
+      client: staff.client,
       feeType,
       amount,
       amountPaid,
       balance,
-      paymentMode,
+      paymentMode: normalizedPaymentMode,
       transactionId,
       chequeNumber,
       bankName,
@@ -62,6 +84,7 @@ exports.collectFee = async (req, res) => {
       receiptNumber: fee._id
     });
   } catch (error) {
+    console.error('collectFee error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -70,13 +93,31 @@ exports.collectFee = async (req, res) => {
 exports.getFeeCollections = async (req, res) => {
   try {
     const { page = 1, limit = 20, search = '', status, fromDate, toDate } = req.query;
-    const admin = await Admin.findById(req.userId).lean();
+    const staff = await Staff.findById(req.userId).lean();
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
+
     const skip = (page - 1) * limit;
     const mongoose = require('mongoose');
 
-    const query = { branch: new mongoose.Types.ObjectId(admin.branch) };
+    const query = { branch: new mongoose.Types.ObjectId(staff.branch) };
 
     if (status) query.status = status;
+    
+    if (search) {
+      const matchingStudents = await Student.find({
+        branch: staff.branch,
+        $or: [
+          { firstName: { $regex: search, $options: 'i' } },
+          { lastName: { $regex: search, $options: 'i' } },
+          { admissionNumber: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } }
+        ]
+      }).select('_id');
+      query.student = { $in: matchingStudents.map(s => s._id) };
+    }
+
     if (fromDate && toDate) {
       query.paymentDate = { 
         $gte: new Date(fromDate), 
@@ -86,7 +127,7 @@ exports.getFeeCollections = async (req, res) => {
 
     const [fees, total, todayCollection, monthlyCollection, statusWiseCount] = await Promise.all([
       FeeCollection.find(query)
-        .populate('student', 'name admissionNumber class')
+        .populate('student', 'firstName lastName admissionNumber class')
         .populate('collectedBy', 'email')
         .sort({ paymentDate: -1 })
         .skip(skip)
@@ -96,7 +137,7 @@ exports.getFeeCollections = async (req, res) => {
       FeeCollection.aggregate([
         { 
           $match: { 
-            branch: new mongoose.Types.ObjectId(admin.branch),
+            branch: new mongoose.Types.ObjectId(staff.branch),
             paymentDate: { 
               $gte: new Date(new Date().setHours(0, 0, 0, 0)),
               $lte: new Date(new Date().setHours(23, 59, 59, 999))
@@ -109,7 +150,7 @@ exports.getFeeCollections = async (req, res) => {
       FeeCollection.aggregate([
         { 
           $match: { 
-            branch: new mongoose.Types.ObjectId(admin.branch),
+            branch: new mongoose.Types.ObjectId(staff.branch),
             paymentDate: { 
               $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
             },
@@ -119,7 +160,7 @@ exports.getFeeCollections = async (req, res) => {
         { $group: { _id: null, total: { $sum: '$amountPaid' } } }
       ]),
       FeeCollection.aggregate([
-        { $match: { branch: new mongoose.Types.ObjectId(admin.branch) } },
+        { $match: { branch: new mongoose.Types.ObjectId(staff.branch) } },
         { $group: { _id: '$status', count: { $sum: 1 }, total: { $sum: '$amountPaid' } } }
       ])
     ]);
@@ -139,6 +180,7 @@ exports.getFeeCollections = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('getFeeCollections error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -147,39 +189,52 @@ exports.getFeeCollections = async (req, res) => {
 exports.getStudentFeeDetails = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const staff = await Staff.findById(req.userId).lean();
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
 
     const student = await Student.findById(studentId)
       .populate('class', 'className')
+      .populate('section', 'sectionName')
       .lean();
 
-    if (!student || student.branch.toString() !== admin.branch.toString()) {
+    if (!student || student.branch.toString() !== staff.branch.toString()) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
     const mongoose = require('mongoose');
     
-    const [feeHistory, totalPaid, totalPending] = await Promise.all([
+    const feeMappings = await FeeMapping.find({ 
+      class: student.class?._id || student.class,
+      section: student.section?._id || student.section,
+      branch: staff.branch 
+    }).populate('fee').lean();
+
+    const assignedTotal = feeMappings.reduce((sum, mapping) => sum + (mapping.fee?.totalAmount || 0), 0);
+
+    const [feeHistory, totalPaidAgg] = await Promise.all([
       FeeCollection.find({ student: studentId })
         .sort({ paymentDate: -1 })
         .lean(),
       FeeCollection.aggregate([
         { $match: { student: new mongoose.Types.ObjectId(studentId), status: { $in: ['paid', 'partial'] } } },
         { $group: { _id: null, total: { $sum: '$amountPaid' } } }
-      ]),
-      FeeCollection.aggregate([
-        { $match: { student: new mongoose.Types.ObjectId(studentId), status: { $in: ['pending', 'partial'] } } },
-        { $group: { _id: null, total: { $sum: '$balance' } } }
       ])
     ]);
+
+    const totalPaid = totalPaidAgg[0]?.total || 0;
+    const actualPending = Math.max(0, assignedTotal - totalPaid);
 
     res.status(200).json({
       student,
       feeHistory,
-      totalPaid: totalPaid[0]?.total || 0,
-      totalPending: totalPending[0]?.total || 0
+      totalPaid,
+      totalPending: actualPending,
+      assignedStructure: feeMappings
     });
   } catch (error) {
+    console.error('getStudentFeeDetails error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -188,11 +243,15 @@ exports.getStudentFeeDetails = async (req, res) => {
 exports.getPendingFees = async (req, res) => {
   try {
     const { page = 1, limit = 20, classId } = req.query;
-    const admin = await Admin.findById(req.userId).lean();
+    const staff = await Staff.findById(req.userId).lean();
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
+
     const skip = (page - 1) * limit;
     const mongoose = require('mongoose');
 
-    const matchQuery = { branch: new mongoose.Types.ObjectId(admin.branch) };
+    const matchQuery = { branch: new mongoose.Types.ObjectId(staff.branch) };
     if (classId) matchQuery.class = new mongoose.Types.ObjectId(classId);
 
     const [students, total] = await Promise.all([
@@ -230,7 +289,8 @@ exports.getPendingFees = async (req, res) => {
         { $unwind: { path: '$classInfo', preserveNullAndEmptyArrays: true } },
         {
           $project: {
-            name: 1,
+            firstName: 1,
+            lastName: 1,
             admissionNumber: 1,
             fatherName: 1,
             mobile: 1,
@@ -242,7 +302,7 @@ exports.getPendingFees = async (req, res) => {
         { $skip: skip },
         { $limit: parseInt(limit) }
       ]),
-      Student.countDocuments({ branch: admin.branch })
+      Student.countDocuments({ branch: staff.branch })
     ]);
 
     res.status(200).json({
@@ -255,6 +315,7 @@ exports.getPendingFees = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('getPendingFees error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -263,20 +324,24 @@ exports.getPendingFees = async (req, res) => {
 exports.generateReceipt = async (req, res) => {
   try {
     const { feeId } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const staff = await Staff.findById(req.userId).lean();
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff not found' });
+    }
 
     const fee = await FeeCollection.findById(feeId)
-      .populate('student', 'name admissionNumber fatherName class')
+      .populate('student', 'firstName lastName admissionNumber fatherName class')
       .populate('branch', 'branchName address')
       .populate('collectedBy', 'email')
       .lean();
 
-    if (!fee || fee.branch._id.toString() !== admin.branch.toString()) {
+    if (!fee || fee.branch._id.toString() !== staff.branch.toString()) {
       return res.status(404).json({ message: 'Fee record not found' });
     }
 
     res.status(200).json({ receipt: fee });
   } catch (error) {
+    console.error('generateReceipt error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

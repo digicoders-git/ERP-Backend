@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../../controller/warden/reportsController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/wardenAuth');
 
 router.get('/overview', auth, ctrl.getOverview);
 router.get('/hostel-wise', auth, ctrl.getHostelWise);

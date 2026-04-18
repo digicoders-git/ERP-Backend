@@ -457,6 +457,53 @@ exports.getFineReport = async (req, res) => {
   }
 };
 
+// ─── GET ALL FINES (for FineManagement page) ───────────────────────────────────
+
+exports.getAllFines = async (req, res) => {
+  try {
+    const adminId = req.userId;
+    const admin = await Admin.findById(adminId);
+    if (!admin) return errorResponse(res, 'Admin not found', 404);
+
+    // Fetch all issues with fines or overdue status for this branch
+    const fines = await BookIssue.find({
+      branch: admin.branch,
+      $or: [
+        { fine: { $gt: 0 } },
+        { fineCollected: { $gt: 0 } },
+        { status: 'overdue' }
+      ]
+    })
+      .populate('book', 'title barcode ISBN')
+      .populate('member', 'firstName lastName admissionNumber rollNumber')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const formattedFines = fines.map(f => {
+      const today = new Date();
+      const dueDate = new Date(f.dueDate);
+      const daysOverdue = f.status === 'returned' 
+        ? Math.ceil((new Date(f.returnDate) - dueDate) / (1000 * 60 * 60 * 24))
+        : Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
+
+      return {
+        _id: f._id,
+        studentName: `${f.member?.firstName || ''} ${f.member?.lastName || ''}`.trim() || 'Unknown',
+        studentId: f.member?.admissionNumber || f.member?.rollNumber || 'N/A',
+        bookTitle: f.book?.title || 'Unknown',
+        dueDate: f.dueDate,
+        daysOverdue: Math.max(0, daysOverdue),
+        amount: f.fine + (f.fineCollected || 0),
+        status: f.fineCollected > 0 && f.fine === 0 ? 'paid' : (f.fineWaived > 0 ? 'waived' : 'pending')
+      };
+    });
+
+    return successResponse(res, formattedFines, 'Fines fetched successfully');
+  } catch (error) {
+    return errorResponse(res, 'Server error', 500, error);
+  }
+};
+
 // ─── QUICK SCAN ACTION ────────────────────────────────────────────────────────
 
 exports.quickScanAction = async (req, res) => {

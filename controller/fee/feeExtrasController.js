@@ -26,7 +26,11 @@ exports.getReceipts = async (req, res) => {
 
     const [collections, total] = await Promise.all([
       FeeCollection.find(query)
-        .populate('student', 'firstName lastName class rollNumber phone')
+        .populate({
+          path: 'student',
+          select: 'firstName lastName class rollNumber phone admissionNumber',
+          populate: { path: 'class', select: 'className' }
+        })
         .sort({ paymentDate: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -38,7 +42,8 @@ exports.getReceipts = async (req, res) => {
       id: `RCP${String(skip + i + 1).padStart(3, '0')}`,
       _id: c._id,
       student: c.student ? `${c.student.firstName} ${c.student.lastName}` : 'Unknown',
-      class: c.student?.class || '',
+      admissionNumber: c.student?.admissionNumber || '',
+      class: c.student?.class?.className || (typeof c.student?.class === 'string' ? c.student?.class : 'N/A'),
       rollNo: c.student?.rollNumber || '',
       phone: c.student?.phone || '',
       amount: c.amountPaid,
@@ -245,7 +250,11 @@ exports.getPendingAlerts = async (req, res) => {
 
     const [pending, aggStats] = await Promise.all([
       FeeCollection.find({ branch, status: { $in: ['pending', 'partial'] } })
-        .populate('student', 'firstName lastName class rollNumber')
+        .populate({
+          path: 'student',
+          select: 'firstName lastName class rollNumber admissionNumber',
+          populate: { path: 'class', select: 'className' }
+        })
         .sort({ paymentDate: 1 })
         .limit(100)
         .lean(),
@@ -260,9 +269,9 @@ exports.getPendingAlerts = async (req, res) => {
       const status = daysOverdue > 20 ? 'Critical' : daysOverdue > 10 ? 'Pending' : 'Warning';
       return {
         _id: p._id,
-        studentId: p.student?.rollNumber || '',
+        studentId: p.student?.admissionNumber || p.student?.rollNumber || '',
         name: p.student ? `${p.student.firstName} ${p.student.lastName}` : 'Unknown',
-        class: p.student?.class || '',
+        class: p.student?.class?.className || (typeof p.student?.class === 'string' ? p.student?.class : 'N/A'),
         amount: p.balance,
         daysOverdue,
         status,

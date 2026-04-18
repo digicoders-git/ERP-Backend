@@ -9,6 +9,9 @@ router.post('/order/create', auth, ctrl.createPaymentOrder);
 // Payment verification
 router.post('/verify', auth, ctrl.verifyPayment);
 
+// Manual Fee Collection (Cash/Offline)
+router.post('/manual-collect', auth, ctrl.manualCollectFee);
+
 // Payment history
 router.get('/history', auth, ctrl.getPaymentHistory);
 

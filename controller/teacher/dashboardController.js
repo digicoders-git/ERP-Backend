@@ -4,65 +4,106 @@ const Assignment = require('../../model/Assignment');
 const Attendance = require('../../model/Attendance');
 const Notice = require('../../model/Notice');
 const Timetable = require('../../model/Timetable');
+const { getCache, setCache } = require('../../utils/cache');
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    const adminId = req.userId;           // Admin._id (teacherAdmin)
-    const teacherId = req.user.teacher;   // Teacher._id from token
-    const branch = req.user.branch;
+    const teacherProfileId = req.user?.teacher;
+    const teacherId = req.userId || req.user?._id; // The teacherId in Timetable/Assignment refers to Admin ID
+    const branch = req.user?.branch;
+
+    if (!teacherProfileId || !branch) {
+      return res.status(400).json({ success: false, message: 'Missing required user information' });
+    }
+
+    // Check cache first
+    const cacheKey = `dashboard:${teacherProfileId}`;
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return res.status(200).json({ success: true, data: cachedData, fromCache: true });
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const dayOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
-    // All parallel - fast loading
-    const [teacher, todayClasses, totalAssignments, pendingAssignments, recentNotices] = await Promise.all([
-      Teacher.findById(teacherId).select('name email subjects').lean(),
-      Timetable.find({ branch, teacherId: adminId, day: dayOfWeek })
-        .populate('classId', 'className')
-        .populate('sectionId', 'sectionName')
-        .sort({ startTime: 1 })
+    console.log('Today:', today, 'Day:', dayOfWeek);
+    const [teacher, todayClasses, assignmentStats, recentNotices] = await Promise.all([
+      Teacher.findById(teacherProfileId)
+        .select('name email subjects profileImage assignedClass assignedSection qualification experience')
+        .populate('assignedClass', 'className classCode stream')
+        .populate('assignedSection', 'sectionName')
         .lean(),
-      Assignment.countDocuments({ branch, teacherId: adminId }),
-      Assignment.countDocuments({ branch, teacherId: adminId, dueDate: { $gte: today }, status: 'active' }),
+      Timetable.find({ branch, teacherId, day: dayOfWeek })
+        .select('classId sectionId className classTime startTime endTime subject room')
+        .lean(),
+      Assignment.aggregate([
+        { $match: { branch, teacherId } },
+        { $facet: {
+            total: [{ $count: 'count' }],
+            pending: [{ $match: { dueDate: { $gte: today }, status: 'active' } }, { $count: 'count' }]
+          }
+        }
+      ]),
       Notice.find({ branch, isPublished: true })
-        .sort({ createdAt: -1 }).limit(5)
-        .select('title type publishDate').lean()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('title type publishDate')
+        .lean()
     ]);
 
     if (!teacher) {
-      return res.status(404).json({ success: false, message: 'Teacher not found' });
+      return res.status(404).json({ success: false, message: 'Teacher not found', teacherId });
     }
+
+    const totalAssignments = assignmentStats[0]?.total[0]?.count || 0;
+    const pendingAssignments = assignmentStats[0]?.pending[0]?.count || 0;
 
     // Get unique classes from timetable
     const classMap = new Map();
+    
+    // Add explicitly assigned class (as class teacher) if not in timetable
+    if (teacher?.assignedClass?._id && teacher?.assignedSection?._id) {
+      const key = `${teacher.assignedClass._id}-${teacher.assignedSection._id}`;
+      classMap.set(key, { classId: teacher.assignedClass._id, sectionId: teacher.assignedSection._id });
+    }
+
     todayClasses.forEach(e => {
-      const key = `${e.classId?._id}-${e.sectionId?._id}`;
-      if (!classMap.has(key)) classMap.set(key, { classId: e.classId?._id, sectionId: e.sectionId?._id });
+      const key = `${e.classId?._id || e.classId}-${e.sectionId?._id || e.sectionId}`;
+      if (!classMap.has(key)) classMap.set(key, { classId: e.classId?._id || e.classId, sectionId: e.sectionId?._id || e.sectionId });
     });
     const classes = Array.from(classMap.values());
     const classIds = classes.map(c => c.classId).filter(Boolean);
     const sectionIds = classes.map(c => c.sectionId).filter(Boolean);
 
-    // Student count + today attendance - parallel
-    const [totalStudents, todayAttendance] = await Promise.all([
-      classIds.length > 0
-        ? Student.countDocuments({ branch, class: { $in: classIds }, section: { $in: sectionIds }, status: 'active' })
-        : Promise.resolve(0),
-      classIds.length > 0
-        ? Attendance.aggregate([
-            { $match: { branch, date: today, type: 'student', classId: { $in: classIds } } },
-            { $group: { _id: '$status', count: { $sum: 1 } } }
-          ])
-        : Promise.resolve([])
-    ]);
+    console.log('Unique classes:', classes.length);
+
+    // Student count + today attendance
+    let totalStudents = 0;
+    let todayAttendance = [];
+
+    if (classIds.length > 0) {
+      totalStudents = await Student.countDocuments({ 
+        branch, 
+        class: { $in: classIds }, 
+        section: { $in: sectionIds }, 
+        status: 'active' 
+      });
+
+      todayAttendance = await Attendance.aggregate([
+        { $match: { branch, date: today, type: 'student', classId: { $in: classIds } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]);
+    }
+
+    console.log('Total students:', totalStudents, 'Attendance records:', todayAttendance.length);
 
     const attMap = {};
     todayAttendance.forEach(i => { attMap[i._id] = i.count; });
     const totalMarked = todayAttendance.reduce((s, i) => s + i.count, 0);
     const attendanceRate = totalMarked > 0 ? Math.round(((attMap.present || 0) / totalMarked) * 100) : 0;
 
-    // Upcoming classes (after current time)
+    // Upcoming classes
     const now = new Date();
     const upcomingClasses = todayClasses
       .filter(cls => {
@@ -77,16 +118,35 @@ exports.getDashboardStats = async (req, res) => {
       .map(cls => ({
         id: cls._id,
         time: cls.classTime || `${cls.startTime}-${cls.endTime}`,
-        class: cls.classId?.className || cls.className,
+        class: cls.classId?.className || (typeof cls.className === 'object' ? cls.className?.className : cls.className) || 'N/A',
         section: cls.sectionId?.sectionName,
         subject: cls.subject,
         room: cls.room
       }));
 
+    console.log('Upcoming classes:', upcomingClasses.length);
+    console.log('=== Dashboard Stats Complete ===');
+
     res.status(200).json({
       success: true,
       data: {
-        teacher: { name: teacher.name, email: teacher.email, subjects: teacher.subjects },
+        teacher: { 
+          id: teacher._id,
+          name: teacher.name || 'N/A', 
+          email: teacher.email || 'N/A', 
+          subjects: teacher.subjects || [],
+          profileImage: teacher.profileImage,
+          assignedClass: teacher.assignedClass ? {
+            id: teacher.assignedClass._id,
+            name: teacher.assignedClass.className,
+            code: teacher.assignedClass.classCode,
+            stream: teacher.assignedClass.stream || [],
+            sectionId: teacher.assignedSection?._id
+          } : null,
+          assignedSection: teacher.assignedSection,
+          qualification: teacher.qualification || 'N/A',
+          experience: teacher.experience || 0
+        },
         stats: {
           totalClasses: classes.length,
           totalStudents,
@@ -113,55 +173,144 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getTeacherClasses = async (req, res) => {
   try {
-    const adminId = req.userId;
-    const branch = req.user.branch;
+    const teacherProfileId = req.user?.teacher;
+    const teacherId = req.userId || req.user?._id;
+    const branch = req.user?.branch;
 
-    const timetableEntries = await Timetable.find({ branch, teacherId: adminId })
-      .populate('classId', 'className classCode')
-      .populate('sectionId', 'sectionName')
+    if (!teacherProfileId || !branch) {
+      return res.status(400).json({ success: false, message: 'Missing required user information' });
+    }
+
+    // Get assigned class
+    const teacher = await Teacher.findById(teacherProfileId)
+      .select('assignedClass assignedSection subjects')
+      .populate('assignedClass', 'className classCode stream')
+      .populate('assignedSection', 'sectionName')
       .lean();
 
     const classMap = new Map();
+
+    // Add assigned class if exists
+    if (teacher?.assignedClass?._id && teacher?.assignedSection?._id) {
+      const key = `${teacher.assignedClass._id}-${teacher.assignedSection._id}`;
+      const streamName = teacher.assignedClass.stream && teacher.assignedClass.stream.length > 0 
+        ? ` (${teacher.assignedClass.stream.join(', ')})` 
+        : '';
+      classMap.set(key, {
+        id: teacher.assignedClass._id,
+        name: `${teacher.assignedClass.className}${streamName} ${teacher.assignedSection.sectionName}`.trim(),
+        class: `${teacher.assignedClass.className}${streamName}`.trim(),
+        section: teacher.assignedSection.sectionName,
+        stream: teacher.assignedClass.stream || [],
+        subject: teacher.subjects && teacher.subjects.length > 0 ? teacher.subjects.join(', ') : 'N/A',
+        room: teacher.assignedSection.sectionName,
+        classId: teacher.assignedClass._id,
+        sectionId: teacher.assignedSection._id,
+        schedule: [],
+        isAssigned: true
+      });
+    }
+
+    // Get timetable classes
+    const timetableEntries = await Timetable.find({ branch, teacherId })
+      .populate('classId', 'className classCode stream')
+      .populate('sectionId', 'sectionName')
+      .lean();
+
     timetableEntries.forEach(e => {
-      const key = `${e.classId?._id}-${e.sectionId?._id}`;
+      // Skip if classId or sectionId are missing
+      if (!e.classId?._id || !e.sectionId?._id) return;
+      
+      const key = `${e.classId._id}-${e.sectionId._id}`;
       if (!classMap.has(key)) {
+        const streamName = e.classId.stream && e.classId.stream.length > 0 
+          ? ` (${e.classId.stream.join(', ')})` 
+          : '';
         classMap.set(key, {
-          id: e.classId?._id,
-          name: `${e.classId?.className || e.className || ''} ${e.sectionId?.sectionName || ''}`.trim(),
-          class: e.classId?.className || e.className,
-          section: e.sectionId?.sectionName,
-          subject: e.subject,
-          room: e.room,
-          classId: e.classId?._id,
-          sectionId: e.sectionId?._id,
-          schedule: []
+          id: e.classId._id,
+          name: `${e.classId.className}${streamName} ${e.sectionId.sectionName}`.trim(),
+          class: `${e.classId.className}${streamName}`.trim(),
+          section: e.sectionId.sectionName,
+          stream: e.classId.stream || [],
+          subject: e.subject || 'N/A',
+          room: e.room || 'N/A',
+          classId: e.classId._id,
+          sectionId: e.sectionId._id,
+          schedule: [],
+          isAssigned: false
         });
       }
-      classMap.get(key).schedule.push({
-        day: e.day,
-        time: e.classTime || `${e.startTime || ''}-${e.endTime || ''}`
-      });
+      const existingClass = classMap.get(key);
+      if (existingClass && e.day && e.classTime) {
+        existingClass.schedule.push({
+          day: e.day,
+          time: e.classTime || `${e.startTime || ''}-${e.endTime || ''}`.trim()
+        });
+      }
     });
 
-    const classEntries = Array.from(classMap.values());
+    const classEntries = Array.from(classMap.values()).filter(cls => cls.classId && cls.sectionId);
 
-    // Get student counts + attendance in parallel
-    const enriched = await Promise.all(classEntries.map(async cls => {
-      if (!cls.classId || !cls.sectionId) return { ...cls, students: 0, attendance: 0 };
+    // Batch all attendance data in one query
+    const classKeys = classEntries.map(c => ({ classId: c.classId, sectionId: c.sectionId }));
+    const allAttendance = await Attendance.aggregate([
+      { $match: { 
+          branch, 
+          type: 'student',
+          classId: { $in: classEntries.map(c => c.classId) },
+          sectionId: { $in: classEntries.map(c => c.sectionId) }
+        } 
+      },
+      { $group: { 
+          _id: { classId: '$classId', sectionId: '$sectionId', status: '$status' }, 
+          count: { $sum: 1 } 
+        } 
+      }
+    ]);
 
-      const [studentCount, attData] = await Promise.all([
-        Student.countDocuments({ branch, class: cls.classId, section: cls.sectionId, status: 'active' }),
-        Attendance.aggregate([
-          { $match: { branch, classId: cls.classId, sectionId: cls.sectionId, type: 'student' } },
-          { $group: { _id: '$status', count: { $sum: 1 } } }
-        ])
-      ]);
+    // Build attendance map
+    const attByClass = {};
+    allAttendance.forEach(item => {
+      const key = `${item._id.classId}-${item._id.sectionId}`;
+      if (!attByClass[key]) attByClass[key] = { present: 0, total: 0 };
+      attByClass[key][item._id.status] = item.count;
+      attByClass[key].total += item.count;
+    });
 
-      const total = attData.reduce((s, i) => s + i.count, 0);
-      const present = attData.find(i => i._id === 'present')?.count || 0;
-      return { ...cls, students: studentCount, attendance: total > 0 ? Math.round((present / total) * 100) : 0 };
-    }));
+    // Batch student counts
+    const studentCounts = await Student.aggregate([
+      { $match: { 
+          branch, 
+          status: 'active',
+          class: { $in: classEntries.map(c => c.classId) },
+          section: { $in: classEntries.map(c => c.sectionId) }
+        } 
+      },
+      { $group: { 
+          _id: { class: '$class', section: '$section' }, 
+          count: { $sum: 1 } 
+        } 
+      }
+    ]);
 
+    // Build student count map
+    const studentByClass = {};
+    studentCounts.forEach(item => {
+      const key = `${item._id.class}-${item._id.section}`;
+      studentByClass[key] = item.count;
+    });
+
+    // Enrich classes with data
+    const enriched = classEntries.map(cls => {
+      const key = `${cls.classId}-${cls.sectionId}`;
+      const att = attByClass[key] || { present: 0, total: 0 };
+      const studentCount = studentByClass[key] || 0;
+      return {
+        ...cls,
+        students: studentCount,
+        attendance: att.total > 0 ? Math.round((att.present / att.total) * 100) : 0
+      };
+    });
     res.status(200).json({ success: true, data: enriched, total: enriched.length });
   } catch (error) {
     console.error('Get teacher classes error:', error);
@@ -218,18 +367,19 @@ exports.getStudentsByClass = async (req, res) => {
 
 exports.getRecentActivities = async (req, res) => {
   try {
-    const adminId = req.userId;
-    const branch = req.user.branch;
+    const teacherProfileId = req.user?.teacher;
+    const teacherId = req.userId || req.user?._id;
+    const branch = req.user?.branch;
     const { limit = 10 } = req.query;
 
     const [recentAssignments, recentNotices] = await Promise.all([
-      Assignment.find({ branch, teacherId: adminId })
+      Assignment.find({ branch, teacherId })
         .sort({ createdAt: -1 }).limit(5)
         .select('title class section createdAt')
         .populate('class', 'className')
         .populate('section', 'sectionName')
         .lean(),
-      Notice.find({ branch, createdBy: adminId })
+      Notice.find({ branch, createdBy: teacherId })
         .sort({ createdAt: -1 }).limit(5)
         .select('title type createdAt').lean()
     ]);
@@ -259,14 +409,14 @@ exports.getRecentActivities = async (req, res) => {
 
 exports.getUpcomingClasses = async (req, res) => {
   try {
-    const adminId = req.userId;
-    const branch = req.user.branch;
+    const teacherId = req.userId || req.user?._id;
+    const branch = req.user?.branch;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const dayOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
-    const todayClasses = await Timetable.find({ branch, teacherId: adminId, day: dayOfWeek })
+    const todayClasses = await Timetable.find({ branch, teacherId, day: dayOfWeek })
       .populate('classId', 'className')
       .populate('sectionId', 'sectionName')
       .sort({ startTime: 1 })
@@ -285,7 +435,7 @@ exports.getUpcomingClasses = async (req, res) => {
       .map(cls => ({
         id: cls._id,
         time: cls.classTime || `${cls.startTime}-${cls.endTime}`,
-        class: cls.classId?.className || cls.className,
+        class: cls.classId?.className || (typeof cls.className === 'object' ? cls.className?.className : cls.className) || 'N/A',
         section: cls.sectionId?.sectionName,
         subject: cls.subject,
         room: cls.room,

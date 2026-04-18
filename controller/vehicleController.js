@@ -44,14 +44,15 @@ exports.createVehicle = async (req, res) => {
 // Get All Vehicles
 exports.getAllVehicles = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '' } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || '';
     const skip = (page - 1) * limit;
-    const adminId = req.userId;
-    const admin = await Admin.findById(adminId);
-
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
-    }
+    const currentUserId = req.userId;
+    const currentUserRole = req.user.role;
+    
+    let branchId = req.user.branch;
+    let clientId = req.user.client;
 
     const searchQuery = search ? {
       $or: [
@@ -61,23 +62,23 @@ exports.getAllVehicles = async (req, res) => {
     } : {};
 
     let vehicles, total;
-    if (admin.role === 'branchAdmin' || admin.role === 'staffAdmin') {
-      searchQuery.branch = admin.branch;
+    if (currentUserRole === 'branchAdmin' || currentUserRole === 'staffAdmin' || currentUserRole === 'driver') {
+      searchQuery.branch = branchId;
       vehicles = await Vehicle.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(limit);
       total = await Vehicle.countDocuments(searchQuery);
-    } else if (admin.role === 'clientAdmin') {
-      searchQuery.client = admin.client;
+    } else if (currentUserRole === 'clientAdmin') {
+      searchQuery.client = clientId;
       vehicles = await Vehicle.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(limit);
       total = await Vehicle.countDocuments(searchQuery);
     } else {
       vehicles = await Vehicle.find(searchQuery)
@@ -86,7 +87,7 @@ exports.getAllVehicles = async (req, res) => {
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(limit);
       total = await Vehicle.countDocuments(searchQuery);
     }
 
@@ -94,12 +95,13 @@ exports.getAllVehicles = async (req, res) => {
       vehicles, 
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         totalPages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
+    console.error('Get all vehicles error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

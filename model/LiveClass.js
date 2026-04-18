@@ -20,6 +20,29 @@ const liveClassSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  duration: {
+    type: String
+  },
+  description: {
+    type: String
+  },
+  class: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class'
+  },
+  section: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Section'
+  },
+  participants: {
+    type: Number,
+    default: 0
+  },
+  status: {
+    type: String,
+    enum: ['Scheduled', 'Active', 'Completed'],
+    default: 'Scheduled'
+  },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Branch',

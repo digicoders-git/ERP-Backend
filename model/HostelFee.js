@@ -3,6 +3,8 @@ const hostelFeeSchema = new mongoose.Schema({
   studentId: { type: String, required: true },
   studentName: { type: String, required: true },
   rollNumber: { type: String },
+  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room' },
+  bedNumber: { type: String },
   month: { type: String, required: true },
   roomRent: { type: Number, default: 0 },
   messCharges: { type: Number, default: 0 },

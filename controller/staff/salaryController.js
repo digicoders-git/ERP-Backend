@@ -1,9 +1,12 @@
 const Salary = require('../../model/Salary');
+const Teacher = require('../../model/Teacher');
 const { successResponse, errorResponse } = require('../../responseFormatter');
 
 exports.getAllSalaries = async (req, res) => {
   try {
-    const salaries = await Salary.find().sort({ createdAt: -1 });
+    const salaries = await Salary.find()
+      .populate('teacher', 'name profileImage email')
+      .sort({ createdAt: -1 });
     return successResponse(res, salaries, 'Salaries fetched successfully');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
@@ -24,23 +27,40 @@ exports.getSalaryById = async (req, res) => {
 
 exports.createSalary = async (req, res) => {
   try {
-    const { teacherName, month, baseSalary, allowances, deductions, status, paymentDate } = req.body;
-
-    if (!teacherName || !month || !baseSalary) {
-      return errorResponse(res, 'Required fields missing', 400);
+    const { teacher, teacherName, month, baseSalary, allowances, deductions, status, paymentDate } = req.body;
+    
+    if (!teacher && !teacherName) {
+      return errorResponse(res, 'Teacher identification is required', 400);
+    }
+    
+    if (!month || baseSalary === undefined) {
+      return errorResponse(res, 'Month and base salary are required', 400);
     }
 
-    const netSalary = baseSalary + (allowances || 0) - (deductions || 0);
+    const b = Number(baseSalary) || 0;
+    const a = Number(allowances) || 0;
+    const d = Number(deductions) || 0;
+    const netSalary = b + a - d;
+
+    // If only teacherName is provided, find the teacher ID
+    let teacherId = teacher;
+    if (!teacherId && teacherName) {
+      const teacherDoc = await Teacher.findOne({ name: teacherName });
+      if (teacherDoc) {
+        teacherId = teacherDoc._id;
+      }
+    }
 
     const salary = new Salary({
-      teacherName,
+      teacher: teacherId || null,
+      teacherName: teacherName,
       month,
-      baseSalary,
-      allowances: allowances || 0,
-      deductions: deductions || 0,
+      baseSalary: b,
+      allowances: a,
+      deductions: d,
       netSalary,
       status: status || 'Pending',
-      paymentDate: status === 'Paid' ? new Date(paymentDate) : null
+      paymentDate: status === 'Paid' ? (paymentDate ? new Date(paymentDate) : new Date()) : null
     });
 
     await salary.save();
@@ -52,18 +72,19 @@ exports.createSalary = async (req, res) => {
 
 exports.updateSalary = async (req, res) => {
   try {
-    const { teacherName, month, baseSalary, allowances, deductions, status, paymentDate } = req.body;
+    const { teacher, teacherName, month, baseSalary, allowances, deductions, status, paymentDate } = req.body;
     const salary = await Salary.findById(req.params.id);
-
+ 
     if (!salary) {
       return errorResponse(res, 'Salary record not found', 404);
     }
 
+    if (teacher) salary.teacher = teacher;
     if (teacherName) salary.teacherName = teacherName;
     if (month) salary.month = month;
-    if (baseSalary) salary.baseSalary = baseSalary;
-    if (allowances !== undefined) salary.allowances = allowances;
-    if (deductions !== undefined) salary.deductions = deductions;
+    if (baseSalary !== undefined) salary.baseSalary = Number(baseSalary);
+    if (allowances !== undefined) salary.allowances = Number(allowances);
+    if (deductions !== undefined) salary.deductions = Number(deductions);
     if (status) salary.status = status;
     if (paymentDate && status === 'Paid') salary.paymentDate = new Date(paymentDate);
 

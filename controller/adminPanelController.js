@@ -5,30 +5,33 @@ const Teacher = require('../model/Teacher');
 const Student = require('../model/Student');
 const FeeCollection = require('../model/FeeCollection');
 const Vehicle = require('../model/Vehicle');
-const Route = require('../model/Route');
 const Book = require('../model/Book');
-const BookIssue = require('../model/BookIssue');
 const HostelAllocation = require('../model/HostelAllocation');
-const Room = require('../model/Room');
-const TransportAllocation = require('../model/TransportAllocation');
 const Approval = require('../model/Approval');
 const mongoose = require('mongoose');
 
 const getClientAdmin = async (userId) => {
-  const admin = await Admin.findById(userId).lean();
-  if (!admin || admin.role !== 'clientAdmin') return null;
-  return admin;
+  return await Admin.findById(userId).lean();
 };
 
-// ─── MAIN DASHBOARD ───────────────────────────────────────────────────────────
-// Single call — all 8 panels summary
+exports.getMe = async (req, res) => {
+  try {
+    const admin = await getClientAdmin(req.userId);
+    if (!admin) return res.status(403).json({ success: false, message: 'Admin not found' });
+    res.status(200).json({ success: true, admin });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
 
 exports.getDashboard = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Only school admin can access this' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Only school admin can access this' });
 
     const clientId = admin.client;
+    if (!clientId) return res.status(400).json({ success: false, message: 'Admin has no client assigned' });
+
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -44,55 +47,59 @@ exports.getDashboard = async (req, res) => {
       pendingApprovals,
       recentBranches
     ] = await Promise.all([
-      // Branches
       Branch.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId) } },
         { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: ['$status', 1, 0] } } } }
       ]),
-      // Staff
       Staff.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId) } },
         { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: ['$status', 1, 0] } } } }
       ]),
-      // Teachers
       Teacher.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId) } },
         { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: ['$status', 1, 0] } } } }
       ]),
-      // Students
       Student.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId) } },
         { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } } } }
       ]),
-      // Fee this month
       FeeCollection.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId), paymentDate: { $gte: thisMonthStart } } },
         { $group: { _id: null, collected: { $sum: '$amountPaid' }, pending: { $sum: '$balance' } } }
       ]),
-      // Vehicles
       Vehicle.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId) } },
         { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } } } }
       ]),
-      // Books
       Book.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId) } },
         { $group: { _id: null, total: { $sum: 1 }, issued: { $sum: '$issuedCopies' }, available: { $sum: '$availableCopies' } } }
       ]),
-      // Hostel
       HostelAllocation.aggregate([
         { $match: { client: new mongoose.Types.ObjectId(clientId), allocationStatus: 'allocated' } },
         { $count: 'occupied' }
       ]),
-      // Pending approvals
       Approval.countDocuments({ status: 'Pending' }),
-      // Recent branches
       Branch.find({ client: clientId })
         .sort({ createdAt: -1 })
         .limit(5)
-        .select('branchName branchCode location students teachers status')
+        .select('_id branchName branchCode location status')
         .lean()
     ]);
+
+    const branchesWithCounts = await Promise.all(
+      recentBranches.map(async (branch) => {
+        const [studentCount, teacherCount] = await Promise.all([
+          Student.countDocuments({ branch: branch._id, client: clientId }),
+          Teacher.countDocuments({ branch: branch._id, client: clientId })
+        ]);
+        return {
+          ...branch,
+          students: studentCount,
+          teachers: teacherCount
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
@@ -133,394 +140,481 @@ exports.getDashboard = async (req, res) => {
           occupied: hostelStats[0]?.occupied || 0
         },
         pendingApprovals,
-        recentBranches
+        recentBranches: branchesWithCounts
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Dashboard error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
-// ─── BRANCH DETAIL ────────────────────────────────────────────────────────────
-
 exports.getBranchDetail = async (req, res) => {
   try {
-    const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Only school admin can access this' });
-
     const { branchId } = req.params;
-    const bid = new mongoose.Types.ObjectId(branchId);
+    const admin = await getClientAdmin(req.userId);
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const [branch, students, teachers, feeStats, recentFees] = await Promise.all([
-      Branch.findOne({ _id: branchId, client: admin.client }).lean(),
-      Student.find({ branch: bid, status: 'active' })
-        .populate('class', 'className')
-        .select('firstName lastName rollNumber class status')
-        .sort({ createdAt: -1 })
-        .limit(20)
-        .lean(),
-      Teacher.find({ branch: bid, status: true })
-        .select('name email mobile subjects qualification status')
-        .sort({ createdAt: -1 })
-        .limit(20)
-        .lean(),
+    const branch = await Branch.findById(branchId).lean();
+    if (!branch) return res.status(404).json({ success: false, message: 'Branch not found' });
+
+    const [studentList, teacherList, fees] = await Promise.all([
+      Student.find({ branch: branchId }).select('_id name email mobile status class rollNo').lean().limit(100),
+      Teacher.find({ branch: branchId }).select('_id name email mobile status subject').lean().limit(100),
       FeeCollection.aggregate([
-        { $match: { branch: bid } },
-        { $group: { _id: '$status', total: { $sum: '$amountPaid' }, count: { $sum: 1 } } }
-      ]),
-      FeeCollection.find({ branch: bid })
-        .populate('student', 'firstName lastName rollNumber')
-        .sort({ paymentDate: -1 })
-        .limit(10)
-        .lean()
+        { $match: { branch: new mongoose.Types.ObjectId(branchId) } },
+        { $group: { _id: null, collected: { $sum: '$amountPaid' }, pending: { $sum: '$balance' } } }
+      ])
     ]);
-
-    if (!branch) return res.status(404).json({ message: 'Branch not found' });
-
-    const feeMap = {};
-    feeStats.forEach(f => { feeMap[f._id] = { total: f.total, count: f.count }; });
 
     res.status(200).json({
       success: true,
       data: {
         branch,
-        students: students.map(s => ({
-          id: s._id,
-          name: `${s.firstName} ${s.lastName}`,
-          rollNo: s.rollNumber,
-          class: s.class?.className || '',
-          status: s.status
-        })),
-        teachers: teachers.map(t => ({
-          id: t._id,
-          name: t.name,
-          email: t.email,
-          phone: t.mobile,
-          subjects: t.subjects,
-          experience: t.qualification,
-          status: t.status ? 'Active' : 'Inactive'
-        })),
-        fees: {
-          paid: { amount: feeMap['paid']?.total || 0, count: feeMap['paid']?.count || 0 },
-          pending: { amount: feeMap['pending']?.total || 0, count: feeMap['pending']?.count || 0 },
-          partial: { amount: feeMap['partial']?.total || 0, count: feeMap['partial']?.count || 0 },
-          recentPayments: recentFees.map(f => ({
-            id: f._id,
-            student: f.student ? `${f.student.firstName} ${f.student.lastName}` : 'Unknown',
-            rollNo: f.student?.rollNumber || '',
-            amount: f.amountPaid,
-            due: f.balance,
-            total: f.amount,
-            status: f.status,
-            date: f.paymentDate
-          }))
-        }
+        students: studentList,
+        teachers: teacherList,
+        fees: fees[0] || { collected: 0, pending: 0 }
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
-
-// ─── ALL PANELS SUMMARY ───────────────────────────────────────────────────────
 
 exports.getStaffData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const { search, department } = req.query;
-    const query = { client: admin.client };
-    if (search) query.$or = [{ name: { $regex: search, $options: 'i' } }, { email: { $regex: search, $options: 'i' } }];
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
 
-    const [staff, total, active, onLeave] = await Promise.all([
-      Staff.find(query).populate('branch', 'branchName').select('-createdBy').sort({ createdAt: -1 }).limit(50).lean(),
-      Staff.countDocuments({ client: admin.client }),
-      Staff.countDocuments({ client: admin.client, status: true }),
-      Staff.countDocuments({ client: admin.client, status: false })
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { mobile: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [staffList, total, active] = await Promise.all([
+      Staff.find(query)
+        .populate('branch', 'branchName')
+        .select('_id name email mobile status branch qualification experience salary profileImage')
+        .lean()
+        .limit(100),
+      Staff.countDocuments(query),
+      Staff.countDocuments({ ...query, status: true })
     ]);
 
-    res.status(200).json({ success: true, data: staff, stats: { total, active, onLeave, departments: 0 } });
+    res.status(200).json({
+      success: true,
+      data: staffList,
+      stats: {
+        total,
+        active,
+        onLeave: total - active,
+        departments: 0
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+exports.getStaffById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const staff = await Staff.findById(id).lean();
+    if (!staff) return res.status(404).json({ success: false, message: 'Staff not found' });
+    res.status(200).json({ success: true, data: staff });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 exports.getTeacherData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const { search } = req.query;
-    const query = { client: admin.client };
-    if (search) query.$or = [{ name: { $regex: search, $options: 'i' } }, { subjects: { $regex: search, $options: 'i' } }];
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
 
-    const [teachers, total, active] = await Promise.all([
-      Teacher.find(query).populate('branch', 'branchName').select('-createdBy').sort({ createdAt: -1 }).limit(50).lean(),
-      Teacher.countDocuments({ client: admin.client }),
-      Teacher.countDocuments({ client: admin.client, status: true })
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { mobile: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [teacherList, total, active] = await Promise.all([
+      Teacher.find(query)
+        .populate('branch', 'branchName')
+        .select('_id name email mobile status branch subject qualification experience salary profileImage')
+        .lean()
+        .limit(100),
+      Teacher.countDocuments(query),
+      Teacher.countDocuments({ ...query, status: true })
     ]);
 
-    res.status(200).json({ success: true, data: teachers, stats: { total, active, onLeave: total - active } });
+    res.status(200).json({
+      success: true,
+      data: teacherList,
+      stats: {
+        total,
+        active,
+        onLeave: total - active
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 exports.getFeeData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const { search, status } = req.query;
-    const query = { client: admin.client };
-    if (status) query.status = status;
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
 
-    const [fees, stats] = await Promise.all([
+    if (search) {
+      query.$or = [
+        { 'student.name': { $regex: search, $options: 'i' } },
+        { 'student.email': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [feeList, total, collected, pending] = await Promise.all([
       FeeCollection.find(query)
-        .populate('student', 'firstName lastName rollNumber class')
-        .sort({ paymentDate: -1 })
-        .limit(50)
-        .lean(),
+        .populate('student', 'name email class')
+        .populate('branch', 'branchName')
+        .select('_id student amountPaid balance paymentDate status')
+        .lean()
+        .limit(100),
+      FeeCollection.countDocuments(query),
       FeeCollection.aggregate([
-        { $match: { client: new mongoose.Types.ObjectId(admin.client) } },
-        { $group: { _id: '$status', total: { $sum: '$amountPaid' }, count: { $sum: 1 } } }
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+      ]),
+      FeeCollection.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$balance' } } }
       ])
     ]);
-
-    const statsMap = {};
-    stats.forEach(s => { statsMap[s._id] = { total: s.total, count: s.count }; });
-
-    const feeList = fees.map(f => ({
-      id: f._id,
-      studentId: f.student?.rollNumber || '',
-      name: f.student ? `${f.student.firstName} ${f.student.lastName}` : 'Unknown',
-      class: f.student?.class || '',
-      feeAmount: f.amount,
-      paid: f.amountPaid,
-      pending: f.balance,
-      status: f.status === 'paid' ? 'Paid' : f.status === 'partial' ? 'Pending' : 'Overdue',
-      lastPayment: f.paymentDate
-    }));
 
     res.status(200).json({
       success: true,
       data: feeList,
       stats: {
-        totalStudents: feeList.length,
-        feePaid: statsMap['paid']?.count || 0,
-        pending: statsMap['pending']?.count || 0,
-        overdue: 0,
-        totalCollection: statsMap['paid']?.total || 0
+        total,
+        collected: collected[0]?.total || 0,
+        pending: pending[0]?.total || 0
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 exports.getTransportData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const [vehicles, routes, allocations] = await Promise.all([
-      Vehicle.find({ client: admin.client }).populate('branch', 'branchName').lean(),
-      Route.find({ client: admin.client }).lean(),
-      TransportAllocation.countDocuments({ client: admin.client, status: true })
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
+
+    if (search) {
+      query.$or = [
+        { vehicleNumber: { $regex: search, $options: 'i' } },
+        { registrationNumber: { $regex: search, $options: 'i' } },
+        { driverName: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [vehicleList, total, active] = await Promise.all([
+      Vehicle.find(query)
+        .select('_id vehicleNumber registrationNumber status driverName driverPhone capacity')
+        .lean()
+        .limit(100),
+      Vehicle.countDocuments(query),
+      Vehicle.countDocuments({ ...query, status: 'active' })
     ]);
-
-    const vehicleList = vehicles.map(v => ({
-      id: v._id,
-      vehicleNo: v.vehicleNo,
-      route: routes.find(r => r._id.toString() === v.route?.toString())?.routeName || 'Unassigned',
-      capacity: v.vehicleCapacity,
-      students: 0,
-      driver: '',
-      status: v.status === 'active' ? 'Active' : 'Maintenance'
-    }));
 
     res.status(200).json({
       success: true,
       data: vehicleList,
       stats: {
-        totalVehicles: vehicles.length,
-        active: vehicles.filter(v => v.status === 'active').length,
-        students: allocations,
-        routes: routes.length
+        total,
+        active,
+        inactive: total - active
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 exports.getLibraryData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const { search } = req.query;
-    const query = { client: admin.client };
-    if (search) query.$or = [{ title: { $regex: search, $options: 'i' } }, { author: { $regex: search, $options: 'i' } }];
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
 
-    const [books, totalBooks, issuedCount] = await Promise.all([
-      Book.find(query).select('title author ISBN category totalCopies availableCopies issuedCopies').sort({ createdAt: -1 }).limit(50).lean(),
-      Book.countDocuments({ client: admin.client }),
-      BookIssue.countDocuments({ client: admin.client, status: { $in: ['issued', 'overdue'] } })
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } },
+        { isbn: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [bookList, total, issued, available] = await Promise.all([
+      Book.find(query)
+        .select('_id title author isbn totalCopies availableCopies issuedCopies category')
+        .lean()
+        .limit(100),
+      Book.countDocuments(query),
+      Book.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$issuedCopies' } } }
+      ]),
+      Book.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$availableCopies' } } }
+      ])
     ]);
-
-    const bookList = books.map(b => ({
-      id: b._id,
-      bookId: b.ISBN || b._id.toString().slice(-6).toUpperCase(),
-      title: b.title,
-      author: b.author,
-      issued: b.issuedCopies || 0,
-      available: b.availableCopies || 0,
-      category: b.category
-    }));
 
     res.status(200).json({
       success: true,
       data: bookList,
-      stats: { totalBooks, issued: issuedCount, available: totalBooks - issuedCount, members: 0 }
+      stats: {
+        total,
+        issued: issued[0]?.total || 0,
+        available: available[0]?.total || 0
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+exports.getLibrarianData = async (req, res) => {
+  try {
+    const admin = await getClientAdmin(req.userId);
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
+
+    const librarians = await Admin.find({ client: admin.client, role: 'libraryAdmin' })
+      .select('_id name email mobile status')
+      .lean()
+      .limit(100);
+
+    res.status(200).json({ success: true, data: librarians });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 exports.getHostelData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const [rooms, allocations] = await Promise.all([
-      Room.find({ client: admin.client }).populate('hostel', 'hostelName').lean(),
-      HostelAllocation.find({ client: admin.client, allocationStatus: 'allocated' })
-        .select('studentId studentName roomNo hostel')
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
+
+    if (search) {
+      query.$or = [
+        { 'student.name': { $regex: search, $options: 'i' } },
+        { 'room.roomNumber': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [allocationList, total, allocated] = await Promise.all([
+      HostelAllocation.find(query)
+        .populate('student', 'name email class')
+        .populate('room', 'roomNumber roomType')
+        .select('_id student room allocationStatus allocationDate')
         .lean()
+        .limit(100),
+      HostelAllocation.countDocuments(query),
+      HostelAllocation.countDocuments({ ...query, allocationStatus: 'allocated' })
     ]);
-
-    const roomList = rooms.map(r => {
-      const roomAllocations = allocations.filter(a => a.roomNo === r.roomNo);
-      return {
-        id: r._id,
-        roomNo: r.roomNo,
-        type: r.roomType?.toString() || 'Standard',
-        occupancy: `${roomAllocations.length}/${r.capacity}`,
-        student: roomAllocations.map(a => a.studentName).join(', ') || 'Vacant',
-        status: roomAllocations.length > 0 ? 'Occupied' : 'Vacant'
-      };
-    });
 
     res.status(200).json({
       success: true,
-      data: roomList,
+      data: allocationList,
       stats: {
-        totalRooms: rooms.length,
-        occupied: allocations.length,
-        vacant: rooms.length - allocations.length,
-        students: allocations.length
+        total,
+        allocated,
+        vacant: total - allocated
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 exports.getParentData = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const { search } = req.query;
-    const query = { client: admin.client, status: 'active' };
-    if (search) query.$or = [
-      { firstName: { $regex: search, $options: 'i' } },
-      { rollNumber: { $regex: search, $options: 'i' } }
-    ];
+    const { search = '' } = req.query;
+    let query = { client: admin.client };
 
-    const [students, total, active] = await Promise.all([
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { mobile: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [studentList, total, active] = await Promise.all([
       Student.find(query)
-        .populate('class', 'className')
-        .select('firstName lastName rollNumber class guardianInfo status')
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean(),
-      Student.countDocuments({ client: admin.client }),
-      Student.countDocuments({ client: admin.client, status: 'active' })
+        .populate('branch', 'branchName')
+        .select('_id name email mobile status branch class rollNo fatherName motherName')
+        .lean()
+        .limit(100),
+      Student.countDocuments(query),
+      Student.countDocuments({ ...query, status: 'active' })
     ]);
-
-    const parentList = students.map(s => ({
-      id: s._id,
-      studentId: s.rollNumber || '',
-      name: `${s.firstName} ${s.lastName}`,
-      class: s.class?.className || '',
-      parentName: s.guardianInfo?.fatherName || '',
-      phone: s.guardianInfo?.guardianPhone || '',
-      status: s.status === 'active' ? 'Active' : 'Inactive'
-    }));
 
     res.status(200).json({
       success: true,
-      data: parentList,
-      stats: { totalStudents: total, activeParents: active, complaints: 0, resolved: 0 }
+      data: studentList,
+      stats: {
+        total,
+        active,
+        inactive: total - active
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
-
-// ─── REPORTS ──────────────────────────────────────────────────────────────────
 
 exports.getReports = async (req, res) => {
   try {
     const admin = await getClientAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
 
-    const clientId = new mongoose.Types.ObjectId(admin.client);
+    const clientId = admin.client;
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [branches, studentStats, teacherCount, staffCount, feeStats] = await Promise.all([
-      Branch.find({ client: admin.client }).select('branchName location students teachers status rating fees').lean(),
-      Student.aggregate([
-        { $match: { client: clientId } },
-        { $group: { _id: '$status', count: { $sum: 1 } } }
-      ]),
-      Teacher.countDocuments({ client: admin.client }),
-      Staff.countDocuments({ client: admin.client }),
+    const [
+      totalStudents,
+      totalStaff,
+      totalTeachers,
+      totalBranches,
+      activeBranches,
+      feeStats,
+      branchList,
+      branchRevenueStats
+    ] = await Promise.all([
+      Student.countDocuments({ client: clientId }),
+      Staff.countDocuments({ client: clientId }),
+      Teacher.countDocuments({ client: clientId }),
+      Branch.countDocuments({ client: clientId }),
+      Branch.countDocuments({ client: clientId, status: true }),
       FeeCollection.aggregate([
-        { $match: { client: clientId } },
-        { $group: { _id: null, totalRevenue: { $sum: '$amountPaid' } } }
+        { $match: { client: new mongoose.Types.ObjectId(clientId) } },
+        { $group: { _id: null, collected: { $sum: '$amountPaid' }, pending: { $sum: '$balance' } } }
+      ]),
+      Branch.find({ client: clientId })
+        .select('_id branchName location status')
+        .lean()
+        .limit(100),
+      FeeCollection.aggregate([
+        { $match: { client: new mongoose.Types.ObjectId(clientId) } },
+        { $group: { _id: '$branch', collected: { $sum: '$amountPaid' } } }
       ])
     ]);
 
-    const totalStudents = studentStats.reduce((s, i) => s + i.count, 0);
-    const totalRevenue = feeStats[0]?.totalRevenue || 0;
+    // Create a map for branch revenue for quick lookup
+    const revenueMap = {};
+    branchRevenueStats.forEach(stat => {
+      if (stat._id) {
+        revenueMap[stat._id.toString()] = stat.collected;
+      }
+    });
+
+    // Get student and teacher counts for each branch
+    const branchesWithCounts = await Promise.all(
+      branchList.map(async (branch) => {
+        const [studentCount, teacherCount] = await Promise.all([
+          Student.countDocuments({ branch: branch._id }),
+          Teacher.countDocuments({ branch: branch._id })
+        ]);
+        return {
+          _id: branch._id,
+          name: branch.branchName,
+          location: branch.location,
+          status: branch.status ? 'Active' : 'Inactive',
+          students: studentCount,
+          teachers: teacherCount,
+          fees: revenueMap[branch._id.toString()] || 0
+        };
+      })
+    );
+
+    const totalRevenue = feeStats[0]?.collected || 0;
+    const totalPending = feeStats[0]?.pending || 0;
 
     res.status(200).json({
       success: true,
       data: {
         overview: {
-          totalBranches: branches.length,
-          activeBranches: branches.filter(b => b.status).length,
+          totalBranches,
+          activeBranches,
           totalStudents,
-          totalTeachers: teacherCount,
-          totalStaff: staffCount,
-          totalRevenue
+          totalTeachers,
+          totalStaff,
+          totalRevenue,
+          feePaid: totalRevenue,
+          feePending: totalPending,
+          feePartial: 0
         },
-        branches: branches.map(b => ({
-          name: b.branchName,
-          location: b.location,
-          students: b.students || 0,
-          teachers: b.teachers || 0,
-          status: b.status ? 'Active' : 'Inactive',
-          rating: b.rating || 0,
-          fees: b.fees || 0
-        }))
+        branches: branchesWithCounts,
+        generatedAt: new Date()
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Reports error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+exports.getProfile = async (req, res) => {
+  try {
+    const admin = await getClientAdmin(req.userId);
+    if (!admin) return res.status(403).json({ success: false, message: 'Admin not found' });
+    res.status(200).json({ success: true, data: admin });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, mobile, address } = req.body;
+    const admin = await Admin.findByIdAndUpdate(
+      req.userId,
+      { name, mobile, address },
+      { new: true }
+    ).lean();
+
+    if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
+    res.status(200).json({ success: true, message: 'Profile updated', data: admin });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };

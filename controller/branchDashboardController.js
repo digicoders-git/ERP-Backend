@@ -18,10 +18,24 @@ const getBranchAdmin = async (userId) => {
 // Full dashboard — all stats in one call using Promise.all
 exports.getBranchDashboard = async (req, res) => {
   try {
+    console.log('Dashboard request from userId:', req.userId);
+    
     const admin = await getBranchAdmin(req.userId);
-    if (!admin) return res.status(403).json({ message: 'Only branch admin can access this' });
+    console.log('Admin found:', admin);
+    
+    if (!admin) {
+      console.log('Admin not found or not branch admin');
+      return res.status(403).json({ message: 'Only branch admin can access this' });
+    }
 
     const branchId = admin.branch;
+    console.log('Branch ID:', branchId);
+    
+    if (!branchId) {
+      console.log('Branch ID not found for admin');
+      return res.status(400).json({ message: 'Branch not assigned to admin' });
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayEnd = new Date(today);
@@ -30,52 +44,59 @@ exports.getBranchDashboard = async (req, res) => {
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
 
+    console.log('Fetching stats for branch:', branchId);
+
     const [
       totalStudents,
       totalTeachers,
       totalStaff,
-      activeClasses,
+      totalClasses,
+      totalSections,
       pendingApprovals,
-      monthlyRevenue,
-      todayStudentAttendance,
-      totalStudentsForAttendance,
-      recentActivities
+      approvedApprovals,
+      rejectedApprovals,
+      recentApprovals
     ] = await Promise.all([
-      Student.countDocuments({ branch: branchId, status: 'active' }),
-      Teacher.countDocuments({ branch: branchId, status: true }),
-      Staff.countDocuments({ branch: branchId, status: true }),
-      Class.countDocuments({ branch: branchId }),
-      Approval.countDocuments({ branch: branchId, status: 'Pending' }),
-      FeeCollection.aggregate([
-        { $match: { branch: new mongoose.Types.ObjectId(branchId), paymentDate: { $gte: thisMonthStart, $lte: thisMonthEnd } } },
-        { $group: { _id: null, total: { $sum: '$amountPaid' } } }
-      ]),
-      Attendance.countDocuments({ branch: branchId, date: { $gte: today, $lte: todayEnd }, type: 'student', status: 'present' }),
-      Attendance.countDocuments({ branch: branchId, date: { $gte: today, $lte: todayEnd }, type: 'student' }),
-      Approval.find({ branch: branchId }).sort({ createdAt: -1 }).limit(5).select('type name status priority createdAt').lean()
+      Student.countDocuments({ branch: branchId, status: 'active' }).catch(err => { console.error('Student count error:', err); return 0; }),
+      Teacher.countDocuments({ branch: branchId, status: true }).catch(err => { console.error('Teacher count error:', err); return 0; }),
+      Staff.countDocuments({ branch: branchId, status: true }).catch(err => { console.error('Staff count error:', err); return 0; }),
+      Class.countDocuments({ branch: branchId }).catch(err => { console.error('Class count error:', err); return 0; }),
+      mongoose.connection.collection('sections').countDocuments({ branch: new mongoose.Types.ObjectId(branchId) }).catch(err => { console.error('Section count error:', err); return 0; }),
+      Approval.countDocuments({ branch: branchId, status: 'Pending' }).catch(err => { console.error('Pending approval count error:', err); return 0; }),
+      Approval.countDocuments({ branch: branchId, status: 'Approved' }).catch(err => { console.error('Approved count error:', err); return 0; }),
+      Approval.countDocuments({ branch: branchId, status: 'Rejected' }).catch(err => { console.error('Rejected count error:', err); return 0; }),
+      Approval.find({ branch: branchId }).sort({ createdAt: -1 }).limit(5).populate('requestedBy', 'name email').populate('createdBy', 'name email').select('type title name status createdAt requestedBy createdBy').lean().catch(err => { console.error('Recent approvals error:', err); return []; })
     ]);
 
-    const todayAttendance = totalStudentsForAttendance > 0
-      ? parseFloat(((todayStudentAttendance / totalStudentsForAttendance) * 100).toFixed(1))
-      : 0;
+    console.log('Stats fetched successfully:', {
+      totalStudents,
+      totalTeachers,
+      totalStaff,
+      totalClasses,
+      totalSections,
+      pendingApprovals,
+      approvedApprovals,
+      rejectedApprovals
+    });
 
     res.status(200).json({
       success: true,
-      data: {
-        stats: {
-          totalStudents,
-          totalTeachers,
-          totalStaff,
-          activeClasses,
-          pendingApprovals,
-          monthlyRevenue: monthlyRevenue[0]?.total || 0,
-          todayAttendance
-        },
-        recentActivities
-      }
+      stats: {
+        totalStudents,
+        totalTeachers,
+        totalStaff,
+        totalClasses,
+        totalSections,
+        pendingApprovals,
+        approvedApprovals,
+        rejectedApprovals
+      },
+      recentApprovals
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Dashboard error:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
   }
 };
 

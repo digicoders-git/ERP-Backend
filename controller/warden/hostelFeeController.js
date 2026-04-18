@@ -1,4 +1,8 @@
 const HostelFee = require('../../model/HostelFee');
+const BedAllocation = require('../../model/BedAllocation');
+const Room = require('../../model/Room');
+const HostelStudent = require('../../model/HostelStudent');
+const Student = require('../../model/Student');
 const { successResponse,  errorResponse } = require('../../responseFormatter');
 
 exports.getAll = async (req, res) => {
@@ -6,9 +10,29 @@ exports.getAll = async (req, res) => {
     const { status, month } = req.query;
     const filter = {};
     if (status) filter.status = status;
-    if (month) filter.month = month;
-    const fees = await HostelFee.find(filter).sort({ createdAt: -1 }).lean();
-    return successResponse(res, fees, 'Fees fetched');
+    if (month && month !== 'all') filter.month = month;
+    
+    const fees = await HostelFee.find(filter)
+      .populate('roomId', 'roomNo')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Self-Healing Fetch: Link latest student data to records
+    const enrichedFees = await Promise.all(fees.map(async (fee) => {
+      let student = await HostelStudent.findById(fee.studentId).lean();
+      if (!student) {
+        student = await Student.findById(fee.studentId).lean();
+      }
+      
+      return {
+        ...fee,
+        studentName: student ? (student.name || `${student.firstName} ${student.lastName}`) : fee.studentName,
+        rollNumber: student ? (student.rollNumber) : fee.rollNumber,
+        roomNumber: fee.roomId?.roomNo || 'N/A'
+      };
+    }));
+
+    return successResponse(res, enrichedFees, 'Fees fetched');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }
@@ -73,13 +97,76 @@ exports.remove = async (req, res) => {
 
 exports.getStats = async (req, res) => {
   try {
-    const fees = await HostelFee.find().lean();
+    const { month } = req.query;
+    const filter = {};
+    if (month && month !== 'all') filter.month = month;
+
+    const fees = await HostelFee.find(filter).lean();
     const totalRevenue = fees.reduce((s, f) => s + (f.paidAmount || 0), 0);
     const pendingDues = fees.reduce((s, f) => s + (f.totalAmount - (f.paidAmount || 0)), 0);
     const paidCount = fees.filter(f => f.status === 'Paid').length;
     const avgPayment = fees.length ? Math.round(totalRevenue / fees.length) : 0;
-    return successResponse(res, { totalRevenue, pendingDues, paidCount, avgPayment, total: fees.length }, 'Stats fetched');
+    
+    return successResponse(res, { 
+      totalRevenue, 
+      pendingDues, 
+      paidCount, 
+      avgPayment, 
+      total: fees.length,
+      currentFilter: month || 'all'
+    }, 'Stats fetched');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
+  }
+};
+
+exports.generateMonthly = async (req, res) => {
+  try {
+    const { month } = req.body;
+    if (!month) return errorResponse(res, 'Month is required', 400);
+
+    const allocations = await BedAllocation.find({ status: 'active' }).lean();
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    for (const alloc of allocations) {
+      // Check if fee already exists for this student in this month
+      const existing = await HostelFee.findOne({ studentId: alloc.studentId, month });
+      if (existing) {
+        skippedCount++;
+        continue;
+      }
+
+      // Fetch room details to get rent
+      const room = await Room.findById(alloc.roomId).populate('roomType').lean();
+      if (!room) continue;
+
+      const roomRent = room.roomType?.monthlyRent || 0;
+      const messCharges = 4500; // Default or could be fetched from mess plan
+      const otherCharges = 500; // Maintenance/Electricity base
+      const totalAmount = roomRent + messCharges + otherCharges;
+
+      const fee = new HostelFee({
+        studentId: alloc.studentId,
+        studentName: alloc.studentName,
+        rollNumber: alloc.rollNumber || 'N/A',
+        roomId: alloc.roomId,
+        bedNumber: alloc.bedNumber,
+        month,
+        roomRent,
+        messCharges,
+        otherCharges,
+        totalAmount,
+        status: 'Pending',
+        dueDate: new Date().toISOString().split('T')[0]
+      });
+
+      await fee.save();
+      createdCount++;
+    }
+
+    return successResponse(res, { createdCount, skippedCount }, `${createdCount} fee records generated successfully`);
+  } catch (error) {
+    return errorResponse(res, 'Server error during generation', 500, error);
   }
 };

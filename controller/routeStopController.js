@@ -8,7 +8,7 @@ exports.addRouteStops = async (req, res) => {
     const { routeId, stops } = req.body;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
     if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
       return res.status(403).json({ message: 'Only branch admin or staff can add route stops' });
     }
@@ -18,23 +18,26 @@ exports.addRouteStops = async (req, res) => {
       return res.status(404).json({ message: 'Route not found' });
     }
 
-    if (route.branch.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const routeBranchId = route.branch?.toString();
+
+    if (routeBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Route does not belong to your branch' });
     }
 
     const routeStops = stops.map(stop => ({
       route: routeId,
       stopName: stop.stopName,
-      stopOrder: stop.stopOrder,
-      pickupTime: stop.pickupTime,
-      dropTime: stop.dropTime,
-      branch: admin.branch,
-      client: admin.client,
+      stopOrder: stop.stopOrder || stop.sequence,
+      pickupTime: stop.pickupTime || stop.arrivalTime,
+      dropTime: stop.dropTime || stop.departureTime,
+      branch: admin.branch?._id || admin.branch,
+      client: admin.client?._id || admin.client,
       createdBy: adminId
     }));
 
     const savedStops = await RouteStop.insertMany(routeStops);
-    res.status(201).json({ message: 'Route stops added successfully', stops: savedStops });
+    res.status(201).json({ message: 'Route stops added successfully', data: savedStops });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -43,22 +46,24 @@ exports.addRouteStops = async (req, res) => {
 // Get All Route Stops
 exports.getAllRouteStops = async (req, res) => {
   try {
-    const adminId = req.userId;
-    const admin = await Admin.findById(adminId);
-
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
-    }
+    const currentUserId = req.userId;
+    const currentUserRole = req.user.role;
+    
+    let branchId = req.user.branch;
+    let clientId = req.user.client;
 
     let routeStops;
-    if (admin.role === 'branchAdmin' || admin.role === 'staffAdmin') {
-      routeStops = await RouteStop.find({ branch: admin.branch })
+    const adminBranchId = branchId?.toString();
+    const adminClientId = clientId?.toString();
+    
+    if (currentUserRole === 'branchAdmin' || currentUserRole === 'staffAdmin' || currentUserRole === 'driver') {
+      routeStops = await RouteStop.find({ branch: adminBranchId })
         .populate('route', 'routeName routeCode')
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ route: 1, stopOrder: 1 });
-    } else if (admin.role === 'clientAdmin') {
-      routeStops = await RouteStop.find({ client: admin.client })
+    } else if (currentUserRole === 'clientAdmin') {
+      routeStops = await RouteStop.find({ client: adminClientId })
         .populate('route', 'routeName routeCode')
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
@@ -72,8 +77,9 @@ exports.getAllRouteStops = async (req, res) => {
         .sort({ route: 1, stopOrder: 1 });
     }
 
-    res.status(200).json({ routeStops });
+    res.status(200).json({ data: routeStops });
   } catch (error) {
+    console.error('Get all route stops error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -84,7 +90,7 @@ exports.getRouteStopById = async (req, res) => {
     const { id } = req.params;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
@@ -99,16 +105,49 @@ exports.getRouteStopById = async (req, res) => {
       return res.status(404).json({ message: 'Route stop not found' });
     }
 
-    if (admin.role === 'branchAdmin' && routeStop.branch._id.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const stopBranchId = routeStop.branch?._id?.toString() || routeStop.branch?.toString();
+
+    if (admin.role === 'branchAdmin' && stopBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (admin.role === 'clientAdmin' && routeStop.client._id.toString() !== admin.client.toString()) {
+    const adminClientId = admin.client?._id?.toString() || admin.client?.toString();
+    const stopClientId = routeStop.client?._id?.toString() || routeStop.client?.toString();
+
+    if (admin.role === 'clientAdmin' && stopClientId !== adminClientId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    res.status(200).json({ routeStop });
+    res.status(200).json({ data: routeStop });
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get Route Stops By Route ID
+exports.getRouteStopsByRoute = async (req, res) => {
+  try {
+    const { routeId } = req.params;
+    const currentUserRole = req.user.role;
+    let branchId = req.user.branch;
+
+    const route = await Route.findById(routeId);
+    if (!route) {
+      return res.status(404).json({ message: 'Route not found' });
+    }
+
+    if (currentUserRole === 'branchAdmin' && route.branch.toString() !== branchId.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const routeStops = await RouteStop.find({ route: routeId })
+      .populate('route', 'routeName routeCode')
+      .sort({ stopOrder: 1 });
+
+    res.status(200).json({ data: routeStops });
+  } catch (error) {
+    console.error('Get route stops by route error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -117,10 +156,10 @@ exports.getRouteStopById = async (req, res) => {
 exports.updateRouteStop = async (req, res) => {
   try {
     const { id } = req.params;
-    const { stopName, stopOrder, pickupTime, dropTime } = req.body;
+    const { stopName, stopOrder, sequence, pickupTime, arrivalTime, dropTime, departureTime, status } = req.body;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
     if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
       return res.status(403).json({ message: 'Only branch admin or staff can update route stops' });
     }
@@ -130,17 +169,24 @@ exports.updateRouteStop = async (req, res) => {
       return res.status(404).json({ message: 'Route stop not found' });
     }
 
-    if (routeStop.branch.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const stopBranchId = routeStop.branch?.toString();
+
+    if (stopBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
     if (stopName) routeStop.stopName = stopName;
     if (stopOrder) routeStop.stopOrder = stopOrder;
-    if (pickupTime) routeStop.pickupTime = pickupTime;
-    if (dropTime) routeStop.dropTime = dropTime;
+    if (sequence) routeStop.stopOrder = sequence;
+    if (pickupTime !== undefined) routeStop.pickupTime = pickupTime;
+    if (arrivalTime !== undefined) routeStop.pickupTime = arrivalTime;
+    if (dropTime !== undefined) routeStop.dropTime = dropTime;
+    if (departureTime !== undefined) routeStop.dropTime = departureTime;
+    if (status !== undefined) routeStop.status = status;
 
     await routeStop.save();
-    res.status(200).json({ message: 'Route stop updated successfully', routeStop });
+    res.status(200).json({ message: 'Route stop updated successfully', data: routeStop });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -152,7 +198,7 @@ exports.deleteRouteStop = async (req, res) => {
     const { id } = req.params;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
     if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
       return res.status(403).json({ message: 'Only branch admin or staff can delete route stops' });
     }
@@ -162,7 +208,10 @@ exports.deleteRouteStop = async (req, res) => {
       return res.status(404).json({ message: 'Route stop not found' });
     }
 
-    if (routeStop.branch.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const stopBranchId = routeStop.branch?.toString();
+
+    if (stopBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

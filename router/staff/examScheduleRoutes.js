@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const examScheduleController = require('../../controller/staff/examScheduleController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/staffAuth');
 
 router.post('/add', auth, examScheduleController.createExamSchedule);
 router.get('/all', auth, examScheduleController.getAllExamSchedules);

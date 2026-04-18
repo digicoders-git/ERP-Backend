@@ -1,25 +1,22 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { cloudinaryUpload } = require('./uploadMiddleware');
 
-// Create uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, '..', 'uploads', 'teacher');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Storage configuration
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: (req, file, cb) => {
+    const uploadDir = path.join('uploads', 'teacher', 'profile');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
     cb(null, uploadDir);
   },
-  filename: function (req, file, cb) {
+  filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, 'teacher-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-// File filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -32,13 +29,20 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Multer upload configuration
 const uploadTeacher = multer({
   storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: fileFilter
 });
 
-module.exports = uploadTeacher;
+const setTeacherHeaders = (req, res, next) => {
+  req.headers['x-panel-name'] = 'teacher';
+  req.headers['x-category-name'] = 'profile';
+  next();
+};
+
+module.exports = {
+  uploadTeacher,
+  setTeacherHeaders,
+  cloudinaryUpload
+};

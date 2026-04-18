@@ -11,6 +11,14 @@ const transportAllocationSchema = new mongoose.Schema({
     enum: ['student', 'staff'],
     required: true
   },
+  student: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Student'
+  },
+  staff: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff'
+  },
   route: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Route',

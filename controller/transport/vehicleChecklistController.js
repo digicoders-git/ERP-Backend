@@ -16,6 +16,11 @@ exports.submitChecklist = async (req,  res) => {
 
     const { brakes, lights, horn, fuel, tyres, engine, mirrors, seatbelts, firstAid, fireExtinguisher, notes, date } = req.body;
 
+    // Validate required fields
+    if (!driver.branch || !driver.client) {
+      return res.status(400).json({ message: 'Driver branch or client information missing' });
+    }
+
     // Determine status based on checklist
     const hasIssue = [brakes, lights, horn, tyres, engine, mirrors, seatbelts, firstAid, fireExtinguisher].some(v => v === false);
     const status = hasIssue ? 'Minor Issues' : 'All Good';
@@ -36,6 +41,7 @@ exports.submitChecklist = async (req,  res) => {
     await checklist.save();
     res.status(201).json({ success: true, message: 'Checklist submitted successfully', data: checklist });
   } catch (error) {
+    console.error('Checklist submission error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

@@ -1,10 +1,15 @@
 const Leave = require('../model/Leave');
 const Admin = require('../model/Admin');
+const Staff = require('../model/Staff');
 
 const getBranch = async (userId) => {
-  const admin = await Admin.findById(userId).select('branch role').lean();
-  if (!admin) return null;
-  return admin.branch;
+  // Try Admin first
+  let user = await Admin.findById(userId).select('branch role').lean();
+  if (user?.branch) return user.branch;
+  
+  // Try Staff if not found in Admin
+  user = await Staff.findById(userId).select('branch').lean();
+  return user?.branch || null;
 };
 
 // Apply Leave
@@ -63,7 +68,7 @@ exports.getAllLeaves = async (req, res) => {
     if (search) query.staffName = { $regex: search, $options: 'i' };
 
     const [leaves, stats] = await Promise.all([
-      Leave.find(query).sort({ createdAt: -1 }).lean(),
+      Leave.find(query).sort({ createdAt: -1 }).populate('staffId', 'name profileImage email').lean(),
       Leave.aggregate([
         { $match: { branch } },
         { $group: { _id: '$status', count: { $sum: 1 } } }

@@ -61,23 +61,24 @@ exports.createAssignment = async (req, res) => {
 // Get All Transport Assignments
 exports.getAllAssignments = async (req, res) => {
   try {
-    const adminId = req.userId;
-    const admin = await Admin.findById(adminId);
-
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
-    }
+    const currentUserId = req.userId;
+    const currentUserRole = req.user.role;
+    
+    let branchId = req.user.branch;
+    let clientId = req.user.client;
 
     let assignments;
-    if (admin.role === 'branchAdmin' || admin.role === 'staffAdmin') {
-      assignments = await TransportAssignment.find({ branch: admin.branch })
+    const adminBranchId = branchId?.toString();
+    const adminClientId = clientId?.toString();
+    if (currentUserRole === 'branchAdmin' || currentUserRole === 'staffAdmin' || currentUserRole === 'driver') {
+      assignments = await TransportAssignment.find({ branch: adminBranchId })
         .populate('vehicle', 'vehicleNo vehicleType')
         .populate('driver', 'name licenseNo')
         .populate('route', 'routeName routeCode')
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role');
-    } else if (admin.role === 'clientAdmin') {
-      assignments = await TransportAssignment.find({ client: admin.client })
+    } else if (currentUserRole === 'clientAdmin') {
+      assignments = await TransportAssignment.find({ client: adminClientId })
         .populate('vehicle', 'vehicleNo vehicleType')
         .populate('driver', 'name licenseNo')
         .populate('route', 'routeName routeCode')

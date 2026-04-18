@@ -6,8 +6,6 @@ const fs = require('fs');
 // Create Staff (Only by Branch Admin)
 exports.createStaff = async (req, res) => {
   try {
-    console.log('Body:', req.body);
-    console.log('File:', req.file);
     const { name, email, mobile, password, qualification, experience, salary, address } = req.body;
 
     if (!name || !email || !mobile || !password) {
@@ -20,10 +18,16 @@ exports.createStaff = async (req, res) => {
       return res.status(403).json({ message: 'Only branch admin can create staff' });
     }
 
-    // Check if email already exists
+    // Check if email already exists in Admin
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ message: 'Email already exists in Admin' });
+    }
+
+    // Check if email already exists in Staff
+    const existingStaff = await Staff.findOne({ email });
+    if (existingStaff) {
+      return res.status(400).json({ message: 'Email already exists in Staff' });
     }
 
     // Handle profile image
@@ -32,11 +36,16 @@ exports.createStaff = async (req, res) => {
       profileImagePath = `/uploads/staff/${req.file.filename}`;
     }
 
+    // Generate Random Staff ID
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    const staffId = `ST${randomDigits}`;
+
     // Create Staff
     const staff = new Staff({
       name,
       email,
       mobile,
+      staffId,
       profileImage: profileImagePath,
       qualification,
       experience,
@@ -69,6 +78,7 @@ exports.createStaff = async (req, res) => {
         name: staff.name,
         email: staff.email,
         mobile: staff.mobile,
+        staffId: staff.staffId,
         profileImage: staff.profileImage,
         qualification: staff.qualification,
         experience: staff.experience,

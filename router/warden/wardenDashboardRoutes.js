@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../../controller/warden/wardenDashboardController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/wardenAuth');
 
 router.get('/dashboard', auth, ctrl.getDashboardData);
 router.get('/rooms-with-types', auth, ctrl.getRoomsWithTypes);

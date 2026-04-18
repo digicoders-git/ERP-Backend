@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const e = require('../../controller/staff/eLearningController');
-const auth = require('../../middleware/auth');
-const uploadResource = require('../../middleware/uploadResource');
+const auth = require('../../middleware/staffAuth');
+const { uploadResource, setResourceHeaders, cloudinaryUpload } = require('../../middleware/uploadResource');
 
 // Dashboard
 router.get('/dashboard', auth, e.getDashboard);
@@ -22,10 +22,10 @@ router.put('/live-classes/:id', auth, e.updateLiveClass);
 router.delete('/live-classes/:id', auth, e.deleteLiveClass);
 
 // Resource
-router.post('/resources', auth, uploadResource.single('file'), e.uploadResource);
+router.post('/resources', auth, setResourceHeaders, uploadResource.single('file'), cloudinaryUpload, e.uploadResource);
 router.get('/resources', auth, e.getAllResources);
 router.get('/resources/:id', auth, e.getResourceById);
-router.put('/resources/:id', auth, uploadResource.single('file'), e.updateResource);
+router.put('/resources/:id', auth, setResourceHeaders, uploadResource.single('file'), cloudinaryUpload, e.updateResource);
 router.delete('/resources/:id', auth, e.deleteResource);
 
 module.exports = router;

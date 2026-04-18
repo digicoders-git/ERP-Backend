@@ -4,7 +4,7 @@ const Warden = require('../../model/Warden');
 // Add Menu
 exports.addMenu = async (req, res) => {
   try {
-    const { day, breakfast, lunch, dinner } = req.body;
+    const { day, breakfast, breakfastTime, lunch, lunchTime, dinner, dinnerTime } = req.body;
     const wardenId = req.userId;
 
     const warden = await Warden.findById(wardenId);
@@ -20,8 +20,11 @@ exports.addMenu = async (req, res) => {
     const menu = new HostelMenu({
       day,
       breakfast,
+      breakfastTime,
       lunch,
+      lunchTime,
       dinner,
+      dinnerTime,
       branch: warden.branch,
       client: warden.client,
       createdBy: wardenId
@@ -79,7 +82,7 @@ exports.getMenuByDay = async (req, res) => {
 exports.updateMenu = async (req, res) => {
   try {
     const { id } = req.params;
-    const { breakfast, lunch, dinner } = req.body;
+    const { breakfast, breakfastTime, lunch, lunchTime, dinner, dinnerTime } = req.body;
     const wardenId = req.userId;
 
     const warden = await Warden.findById(wardenId);
@@ -97,8 +100,11 @@ exports.updateMenu = async (req, res) => {
     }
 
     if (breakfast) menu.breakfast = breakfast;
+    if (breakfastTime) menu.breakfastTime = breakfastTime;
     if (lunch) menu.lunch = lunch;
+    if (lunchTime) menu.lunchTime = lunchTime;
     if (dinner) menu.dinner = dinner;
+    if (dinnerTime) menu.dinnerTime = dinnerTime;
 
     await menu.save();
     res.status(200).json({ message: 'Menu updated successfully', menu });

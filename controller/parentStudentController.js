@@ -6,6 +6,7 @@ const FeeCollection = require('../model/FeeCollection');
 const Assignment = require('../model/Assignment');
 const Attendance = require('../model/Attendance');
 const BookIssue = require('../model/BookIssue');
+const AssignmentSubmission = require('../model/AssignmentSubmission');
 const LiveClass = require('../model/LiveClass');
 const VideoClass = require('../model/VideoClass');
 const Diary = require('../model/Diary');
@@ -15,12 +16,63 @@ const HostelService = require('../model/HostelService');
 const CheckInOut = require('../model/CheckInOut');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const Event = require('../model/Event');
+const Book = require('../model/Book');
+const BookRequest = require('../model/BookRequest');
 
 // ─── LOGIN ───────────────────────────────────────────────────────────────────
 
 exports.login = async (req, res) => {
   try {
-    const { mobile, password, role } = req.body;
+    const { mobile, password, role, admissionNumber, dob } = req.body;
+
+    // ─── Student Login via Admission Number & DOB ──────────────────────────
+    if (role === 'student' && admissionNumber && dob) {
+      const student = await Student.findOne({ admissionNumber }).lean();
+      if (!student) return res.status(401).json({ message: 'Invalid Enrollment Number' });
+
+      // Verify DOB (Normalize both to YYYY-MM-DD for comparison)
+      const studentDob = new Date(student.dob).toISOString().split('T')[0];
+      const inputDob = new Date(dob).toISOString().split('T')[0];
+
+      if (studentDob !== inputDob) {
+        return res.status(401).json({ message: 'Invalid Date of Birth' });
+      }
+
+      // Find or Create ParentStudent record
+      let user = await ParentStudent.findOne({ studentId: student._id, role: 'student' }).lean();
+
+      if (!user) {
+        // Create user record if identity is verified via Student model
+        const newUser = new ParentStudent({
+          firstName: student.firstName,
+          lastName: student.lastName,
+          mobile: student.phone || student.mobile || '0000000000',
+          password: await require('bcryptjs').hash('student_default_123', 10),
+          role: 'student',
+          studentId: student._id,
+          rollNumber: student.rollNumber,
+          branch: student.branch,
+          client: student.client,
+          status: true
+        });
+        const saved = await newUser.save();
+        user = saved.toObject();
+      }
+
+      if (!user.status) return res.status(403).json({ message: 'Account is inactive' });
+
+      const token = jwt.sign(
+        { _id: user._id, role: user.role, branch: user.branch, client: user.client, studentId: user.studentId },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '7d' }
+      );
+
+      const { password: _, ...userData } = user;
+      return res.status(200).json({ success: true, message: 'Login successful', token, user: userData });
+    }
+
+    // ─── Standard Login via Mobile & Password ──────────────────────────────
     if (!mobile || !password || !role) {
       return res.status(400).json({ message: 'mobile, password and role are required' });
     }
@@ -45,10 +97,24 @@ exports.login = async (req, res) => {
   }
 };
 
-// ─── AUTH MIDDLEWARE HELPER ───────────────────────────────────────────────────
+// ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
 const getUser = async (userId) => {
   return ParentStudent.findById(userId).lean();
+};
+
+const validateStudentAccess = (user, requestedStudentId) => {
+  if (!user) return null;
+  if (user.role === 'student') return user.studentId?.toString();
+  if (user.role === 'parent') {
+    if (!user.children || user.children.length === 0) return null;
+    if (requestedStudentId) {
+      const isMine = user.children.some(c => (c.studentId || c.id)?.toString() === requestedStudentId.toString());
+      return isMine ? requestedStudentId : user.children[0].studentId?.toString() || user.children[0].id?.toString();
+    }
+    return user.children[0].studentId?.toString() || user.children[0].id?.toString();
+  }
+  return requestedStudentId; // Warden
 };
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
@@ -58,8 +124,8 @@ exports.getDashboard = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    const studentId = validateStudentAccess(user, req.query.studentId);
     const branch = user.branch;
-    const studentId = user.studentId;
 
     if (user.role === 'warden') {
       const [totalStudents, pendingComplaints, activeServices] = await Promise.all([
@@ -73,32 +139,93 @@ exports.getDashboard = async (req, res) => {
       });
     }
 
-    if (user.role === 'student' && studentId) {
+    if (studentId) {
+      // Fetch student first to get class/section IDs for subsequent queries
+      const student = await Student.findById(studentId).populate('class', 'className').populate('section', 'sectionName').lean();
+      if (!student) return res.status(404).json({ message: 'Student master record not found' });
+
       const sid = new mongoose.Types.ObjectId(studentId);
       const today = new Date(); today.setHours(0, 0, 0, 0);
 
-      const [student, todayAttendance, pendingFees, issuedBooks, upcomingAssignments] = await Promise.all([
-        Student.findById(studentId).populate('class', 'className').populate('section', 'sectionName').lean(),
+      const [todayAttendance, pendingFees, issuedBooks, upcomingAssignments, totalAttendance, upcomingEvents, totalAttendanceHistory, recentPayments] = await Promise.all([
         Attendance.findOne({ studentId: sid, date: { $gte: today }, type: 'student' }).lean(),
-        FeeCollection.countDocuments({ student: sid, status: { $in: ['pending', 'partial'] } }),
+        FeeCollection.aggregate([
+          { $match: { student: sid, status: { $in: ['pending', 'partial'] } } },
+          { $group: { _id: null, total: { $sum: '$balance' } } }
+        ]),
         BookIssue.countDocuments({ member: sid, status: { $in: ['issued', 'overdue'] } }),
-        Assignment.countDocuments({ branch, dueDate: { $gte: new Date() } })
+        Assignment.countDocuments({ 
+          branch, 
+          class: student.class?._id, 
+          status: 'active', 
+          dueDate: { $gte: new Date() } 
+        }),
+        Attendance.aggregate([
+          { $match: { studentId: sid, type: 'student' } },
+          { $group: { _id: '$status', count: { $sum: 1 } } }
+        ]),
+        Event.find({ branch, status: 'upcoming', date: { $gte: new Date() } }).sort({ date: 1 }).limit(5).lean(),
+        Attendance.find({ studentId: sid }).sort({ date: -1 }).limit(3).lean(),
+        FeeCollection.find({ student: sid, status: 'paid' }).sort({ paymentDate: -1 }).limit(2).lean()
       ]);
+
+      const attStats = {};
+      totalAttendance.forEach(a => { attStats[a._id] = a.count; });
+      const totalAttDays = totalAttendance.reduce((sum, a) => sum + a.count, 0);
+      const attPercentage = totalAttDays > 0 ? Math.round(((attStats.present || 0) / totalAttDays) * 100) : 0;
+
+      const recentActivities = [];
+      
+      // Combine attendance into activities
+      totalAttendanceHistory.forEach(att => {
+        recentActivities.push({
+          title: `Attendance marked as ${att.status}`,
+          time: new Date(att.date).toLocaleDateString(),
+          type: 'attendance',
+          date: att.date
+        });
+      });
+
+      // Combine payments
+      recentPayments.forEach(pay => {
+        recentActivities.push({
+          title: `Fee payment of ₹${pay.amountPaid} successful`,
+          time: new Date(pay.paymentDate).toLocaleDateString(),
+          type: 'payment',
+          date: pay.paymentDate
+        });
+      });
+
+      // Sort by date desc
+      recentActivities.sort((a, b) => new Date(b.date) - new Date(a.date));
 
       return res.status(200).json({
         success: true,
         data: {
-          role: 'student',
-          student: { name: `${user.firstName} ${user.lastName}`, class: student?.class?.className, section: student?.section?.sectionName, rollNumber: user.rollNumber },
-          stats: { todayAttendance: todayAttendance?.status || 'Not Marked', pendingFees, issuedBooks, upcomingAssignments }
+          role: user.role,
+          student: { 
+            name: `${student?.firstName} ${student?.lastName}`, 
+            class: student?.class?.className || user.class, 
+            section: student?.section?.sectionName || user.section, 
+            rollNumber: student?.rollNumber || user.rollNumber,
+            admissionNumber: student?.admissionNumber
+          },
+          stats: { 
+            todayAttendance: todayAttendance?.status || 'Not Marked', 
+            pendingFees: pendingFees[0]?.total || 0, 
+            issuedBooks, 
+            upcomingAssignments,
+            attendancePercentage: attPercentage
+          },
+          upcomingEvents: upcomingEvents.map(e => ({
+            title: e.title,
+            date: new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            time: e.startTime || 'TBD',
+            type: e.type.toLowerCase()
+          })),
+          recentActivities: recentActivities.slice(0, 5),
+          children: user.role === 'parent' ? user.children : []
         }
-      });
-    }
-
-    if (user.role === 'parent') {
-      return res.status(200).json({
-        success: true,
-        data: { role: 'parent', children: user.children || [], firstName: user.firstName }
       });
     }
 
@@ -115,30 +242,75 @@ exports.getTimetable = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
-    const student = await Student.findById(studentId).lean();
+    const student = await Student.findById(studentId)
+      .populate('class', 'className _id')
+      .populate('section', 'sectionName _id')
+      .lean();
     if (!student) return res.status(404).json({ message: 'Student not found' });
 
-    const timetable = await Timetable.find({ branch: user.branch, classId: student.class, sectionId: student.section })
+    // Get student's class and section IDs
+    const sClassId = student.class?._id?.toString();
+    const sSectionId = student.section?._id?.toString();
+    const sBranch = user.branch?.toString();
+
+    if (!sClassId) {
+      return res.status(200).json({ 
+        success: true, 
+        data: {
+          'Monday': [], 'Tuesday': [], 'Wednesday': [], 'Thursday': [], 'Friday': [], 'Saturday': [], 'Sunday': []
+        },
+        _stats: { total: 0, final: 0, message: 'Student class not assigned' }
+      });
+    }
+
+    // Query timetable with proper filters
+    const timetables = await Timetable.find({
+      branch: sBranch,
+      classId: sClassId,
+      ...(sSectionId && { sectionId: sSectionId })
+    })
       .populate('teacherId', 'name email')
       .sort({ day: 1, startTime: 1 })
       .lean();
 
-    // Group by day
-    const grouped = {};
-    timetable.forEach(t => {
-      if (!grouped[t.day]) grouped[t.day] = [];
-      grouped[t.day].push({
-        time: t.startTime || t.classTime,
-        subject: t.subject,
-        teacher: t.teacherId?.name || 'TBD',
-        room: t.room || ''
+    const grouped = {
+      'Monday': [], 'Tuesday': [], 'Wednesday': [], 'Thursday': [], 'Friday': [], 'Saturday': [], 'Sunday': []
+    };
+
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    timetables.forEach(t => {
+      if (!t.day) return;
+      
+      // Normalize day name
+      const dayName = dayOrder.find(d => d.toLowerCase() === t.day.toLowerCase());
+      if (!dayName) return;
+
+      grouped[dayName].push({
+        time: t.startTime || t.classTime || 'TBD',
+        subject: t.subject || 'Special Class',
+        type: (t.subject || 'general').toLowerCase().replace(/[^a-z]/g, ''),
+        teacher: t.teacherId?.name || t.teacherName || 'Academic Dept',
+        room: t.room || 'Classroom'
       });
     });
 
-    res.status(200).json({ success: true, data: grouped });
+    res.status(200).json({ 
+      success: true, 
+      data: grouped,
+      _stats: { 
+        total: timetables.length,
+        final: timetables.length,
+        ident: {
+          name: `${student.firstName} ${student.lastName || ''}`,
+          class: student.class?.className,
+          section: student.section?.sectionName
+        }
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -151,8 +323,8 @@ exports.getFee = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const sid = new mongoose.Types.ObjectId(studentId);
 
@@ -200,23 +372,88 @@ exports.getAssignments = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    let classId = null;
-    if (studentId) {
-      const student = await Student.findById(studentId).lean();
-      classId = student?.class;
-    }
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
+
+    const student = await Student.findById(studentId).lean();
+    const classId = student?.class;
+    const sectionId = student?.section;
 
     const query = { branch: user.branch };
-    if (classId) query.classId = classId;
+    if (classId) query.class = classId;
+    if (sectionId) query.section = sectionId;
 
     const assignments = await Assignment.find(query)
-      .populate('teacherId', 'name')
+      .populate({
+        path: 'teacherId',
+        select: 'name profileImage teacher',
+        populate: { path: 'teacher', select: 'name' }
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'name teacher',
+        populate: { path: 'teacher', select: 'name' }
+      })
       .sort({ dueDate: 1 })
       .limit(20)
       .lean();
 
-    res.status(200).json({ success: true, data: assignments });
+    // Fetch submissions for this student
+    const submissions = await AssignmentSubmission.find({
+      student: studentId,
+      assignment: { $in: assignments.map(a => a._id) }
+    }).lean();
+
+    const formattedAssignments = assignments.map(a => {
+      const teacherObj = a.teacherId || a.createdBy;
+      const teacherName = teacherObj?.teacher?.name || teacherObj?.name || 'Class Teacher';
+      const submission = submissions.find(s => s.assignment.toString() === a._id.toString());
+      
+      return {
+        id: a._id,
+        title: a.title,
+        subject: a.subject,
+        dueDate: new Date(a.dueDate).toLocaleDateString('en-GB'),
+        status: submission ? (submission.status === 'graded' ? `Graded (${submission.marksReceived}/${a.marks})` : 'Submitted') : 'Pending',
+        description: a.description,
+        teacher: teacherName,
+        totalMarks: a.marks || 0,
+        submission: submission || null
+      };
+    });
+
+    res.status(200).json({ success: true, data: formattedAssignments });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.submitAssignment = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { studentId, assignmentId, content, attachments } = req.body;
+    if (!assignmentId) return res.status(400).json({ message: 'assignmentId required' });
+
+    const sid = studentId || user.studentId;
+    
+    // Check if duplicate
+    const existing = await AssignmentSubmission.findOne({ assignment: assignmentId, student: sid });
+    if (existing) return res.status(400).json({ message: 'Assignment already submitted' });
+
+    const submission = new AssignmentSubmission({
+      assignment: assignmentId,
+      student: sid,
+      content,
+      attachments: attachments || [],
+      status: 'submitted',
+      branch: user.branch,
+      client: user.client
+    });
+
+    await submission.save();
+    res.status(201).json({ success: true, message: 'Assignment submitted successfully', data: submission });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -229,10 +466,20 @@ exports.getNotices = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
+
+    const student = await Student.findById(studentId).populate('class').lean();
+    const className = student?.class?.className || user.class; // Handle populated class name
+
     const notices = await Notice.find({
       branch: user.branch,
       isPublished: true,
-      expiryDate: { $gte: new Date() }
+      expiryDate: { $gte: new Date() },
+      $or: [
+        { class: 'All' },
+        { class: className }
+      ]
     })
       .sort({ priority: -1, publishDate: -1 })
       .limit(20)
@@ -252,8 +499,8 @@ exports.getLibrary = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const sid = new mongoose.Types.ObjectId(studentId);
 
@@ -280,6 +527,93 @@ exports.getLibrary = async (req, res) => {
   }
 };
 
+exports.getBrowseBooks = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { search, category } = req.query;
+    const query = { 
+      branch: user.branch,
+      availableCopies: { $gt: 0 }
+    };
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+
+    const books = await Book.find(query).limit(50).lean();
+    res.status(200).json({ success: true, data: books });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.requestBook = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { studentId, bookId, priority } = req.body;
+    if (!bookId) return res.status(400).json({ message: 'bookId required' });
+
+    const sid = studentId || user.studentId;
+    const student = await Student.findById(sid).lean();
+    const book = await Book.findById(bookId).lean();
+
+    if (!student || !book) return res.status(404).json({ message: 'Student or Book not found' });
+
+    // Check if duplicate pending request
+    const existing = await BookRequest.findOne({ 
+      student: sid, 
+      book: bookId, 
+      status: 'Pending' 
+    });
+    if (existing) return res.status(400).json({ message: 'You already have a pending request for this book' });
+
+    const request = new BookRequest({
+      student: sid,
+      studentName: `${student.firstName} ${student.lastName}`,
+      studentId: student.customId || student.admissionNumber,
+      book: bookId,
+      bookTitle: book.title,
+      priority: priority || 'Medium',
+      branch: user.branch,
+      client: user.client
+    });
+
+    await request.save();
+    res.status(201).json({ success: true, message: 'Book request submitted successfully', data: request });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.getBookRequests = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
+
+    const requests = await BookRequest.find({ student: studentId })
+      .populate('book', 'title author category')
+      .sort({ requestDate: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: requests });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // ─── HOSTEL ───────────────────────────────────────────────────────────────────
 
 exports.getHostel = async (req, res) => {
@@ -287,14 +621,15 @@ exports.getHostel = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const [allocation, menu, entryLogs, services] = await Promise.all([
-      studentId ? HostelAllocation.findOne({ studentId: studentId.toString(), allocationStatus: 'allocated' })
-        .populate('hostel', 'hostelName contactNo').lean() : null,
+      HostelAllocation.findOne({ studentId: studentId.toString(), allocationStatus: 'allocated' })
+        .populate('hostel', 'hostelName contactNo').lean(),
       HostelMenu.find({ branch: user.branch }).sort({ day: 1 }).lean(),
-      studentId ? CheckInOut.find({ studentId: studentId.toString() }).sort({ timestamp: -1 }).limit(10).lean() : [],
-      studentId ? HostelService.find({ studentId: studentId.toString() }).sort({ createdAt: -1 }).limit(10).lean() : []
+      CheckInOut.find({ studentId: studentId.toString() }).sort({ timestamp: -1 }).limit(10).lean(),
+      HostelService.find({ studentId: studentId.toString() }).sort({ createdAt: -1 }).limit(10).lean()
     ]);
 
     res.status(200).json({
@@ -322,23 +657,53 @@ exports.getLiveClasses = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    let classId = null;
-    if (studentId) {
-      const student = await Student.findById(studentId).lean();
-      classId = student?.class;
-    }
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
-    const query = { branch: user.branch, isPublished: true };
-    if (classId) query.classId = classId;
+    const student = await Student.findById(studentId)
+      .populate('class', 'className _id')
+      .populate('section', 'sectionName _id')
+      .lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const classId = student?.class?._id;
+    const sectionId = student?.section?._id;
+
+    const query = { 
+      branch: user.branch,
+      client: user.client
+    };
+    if (classId) query.class = classId;
+    if (sectionId) query.section = sectionId;
 
     const classes = await LiveClass.find(query)
-      .populate('teacherId', 'name')
-      .sort({ scheduledAt: -1 })
+      .populate('createdBy', 'name')
+      .sort({ date: 1 })
       .limit(20)
       .lean();
 
-    res.status(200).json({ success: true, data: classes });
+    const formattedClasses = classes.map(c => {
+      const teacherName = c.createdBy?.name || 'Academic Dept';
+      const classDate = new Date(c.date);
+      
+      return {
+        id: c._id,
+        title: c.title,
+        topic: c.title,
+        subject: c.subject,
+        scheduledAt: c.date,
+        date: classDate.toLocaleDateString('en-GB'),
+        startTime: classDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        endTime: c.duration ? `${new Date(classDate.getTime() + parseInt(c.duration) * 60000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : 'N/A',
+        duration: c.duration || '60',
+        teacher: teacherName,
+        status: c.status?.toLowerCase() || 'scheduled',
+        meetingLink: c.meetLink || '#',
+        description: c.description || ''
+      };
+    });
+
+    res.status(200).json({ success: true, data: formattedClasses });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -351,24 +716,96 @@ exports.getRecordedClasses = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    let classId = null;
-    if (studentId) {
-      const student = await Student.findById(studentId).lean();
-      classId = student?.class;
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
+
+    const student = await Student.findById(studentId)
+      .populate('class', 'className _id')
+      .populate('section', 'sectionName _id')
+      .lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const classId = student?.class?._id?.toString();
+    const sectionId = student?.section?._id?.toString();
+    const sBranch = user.branch?.toString();
+    const sClient = user.client?.toString();
+
+    let videos = [];
+
+    // Try 1: Fetch with class and section
+    if (classId && sectionId) {
+      videos = await VideoClass.find({ 
+        branch: sBranch,
+        client: sClient,
+        class: classId,
+        section: sectionId
+      })
+        .populate('class', 'className')
+        .populate('section', 'sectionName')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
     }
 
-    const query = { branch: user.branch, isPublished: true };
-    if (classId) query.classId = classId;
+    // Try 2: If no videos, fetch with class only
+    if (videos.length === 0 && classId) {
+      videos = await VideoClass.find({ 
+        branch: sBranch,
+        client: sClient,
+        class: classId
+      })
+        .populate('class', 'className')
+        .populate('section', 'sectionName')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+    }
 
-    const videos = await VideoClass.find(query)
-      .populate('teacherId', 'name')
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
+    // Try 3: If still no videos, fetch all for branch
+    if (videos.length === 0) {
+      videos = await VideoClass.find({ 
+        branch: sBranch,
+        client: sClient
+      })
+        .populate('class', 'className')
+        .populate('section', 'sectionName')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+    }
 
-    res.status(200).json({ success: true, data: videos });
+    const formattedVideos = videos.map(v => {
+      const teacherName = v.createdBy?.name || 'Academic Dept';
+      
+      return {
+        id: v._id,
+        title: v.title || 'Untitled Video',
+        subject: v.subject || 'General',
+        duration: v.duration || '0',
+        thumbnail: v.thumbnailUrl || '',
+        videoUrl: v.videoUrl || '',
+        teacher: teacherName,
+        uploadedAt: new Date(v.createdAt).toLocaleDateString('en-GB'),
+        views: v.views || 0,
+        class: v.class?.className || 'All Classes',
+        section: v.section?.sectionName || 'All Sections'
+      };
+    });
+
+    res.status(200).json({ 
+      success: true, 
+      data: formattedVideos,
+      _debug: {
+        studentClass: student.class?.className,
+        studentSection: student.section?.sectionName,
+        totalFound: formattedVideos.length
+      }
+    });
   } catch (error) {
+    console.error('Recorded Classes Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -380,23 +817,43 @@ exports.getEDiary = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    let classId = null;
-    if (studentId) {
-      const student = await Student.findById(studentId).lean();
-      classId = student?.class;
-    }
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
+
+    const student = await Student.findById(studentId).lean();
+    const classId = student?.class;
 
     const query = { branch: user.branch };
-    if (classId) query.classId = classId;
+    if (classId) query.class = classId;
 
     const diaries = await Diary.find(query)
-      .populate('teacherId', 'name')
+      .populate({
+        path: 'createdBy',
+        select: 'name teacher',
+        populate: { path: 'teacher', select: 'name' }
+      })
       .sort({ date: -1 })
       .limit(20)
       .lean();
 
-    res.status(200).json({ success: true, data: diaries });
+    const formattedDiaries = diaries.map(d => {
+      const teacherName = d.createdBy?.teacher?.name || d.createdBy?.name || 'Class Teacher';
+      
+      return {
+        id: d._id,
+        subject: d.title, // or d.subject if available, fallback to title
+        teacher: teacherName,
+        date: new Date(d.date).toLocaleDateString('en-GB'),
+        priority: d.priority || 'normal',
+        topic: d.content,
+        homework: d.type === 'homework' ? d.content : 'No homework assigned',
+        notes: d.type === 'important' ? d.content : 'Follow the class notes',
+        status: 'pending', // Diary entries are typically read-only references
+        type: d.type || 'general'
+      };
+    });
+
+    res.status(200).json({ success: true, data: formattedDiaries });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -424,24 +881,29 @@ exports.getWardenServices = async (req, res) => {
 exports.recordWardenService = async (req, res) => {
   try {
     const user = await getUser(req.userId);
-    if (!user || user.role !== 'warden') return res.status(403).json({ message: 'Warden access only' });
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { studentId, studentName, serviceType, date } = req.body;
-    if (!studentId || !serviceType) return res.status(400).json({ message: 'studentId and serviceType required' });
+    const { studentId, serviceType, serviceCategory, description } = req.body;
+    const sid = studentId || user.studentId;
+    
+    const student = await Student.findById(sid).select('firstName lastName').lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
 
     const service = new HostelService({
-      studentId, studentName, serviceType,
-      serviceCategory: serviceType,
-      date: date || new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString(),
+      studentId: sid,
+      studentName: `${student.firstName} ${student.lastName}`,
+      serviceType: serviceType || 'General Request',
+      serviceCategory: serviceCategory || 'Other',
+      description,
+      date: new Date().toLocaleDateString('en-GB'),
+      time: new Date().toLocaleTimeString('en-GB'),
       status: 'Pending',
       branch: user.branch,
-      client: user.client,
-      createdBy: user._id
+      client: user.client
     });
 
     await service.save();
-    res.status(201).json({ success: true, message: 'Service recorded', data: service });
+    res.status(201).json({ success: true, message: 'Service requested successfully', data: service });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -506,8 +968,8 @@ exports.getAttendanceHistory = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const { startDate, endDate, month } = req.query;
     const sid = new mongoose.Types.ObjectId(studentId);
@@ -577,8 +1039,8 @@ exports.getExamResults = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const ExamSchedule = require('../model/ExamSchedule');
     const sid = new mongoose.Types.ObjectId(studentId);
@@ -641,8 +1103,8 @@ exports.getTransportInfo = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const TransportAllocation = require('../model/TransportAllocation');
     const Route = require('../model/Route');
@@ -834,6 +1296,28 @@ exports.confirmPayment = async (req, res) => {
   }
 };
 
+// ─── UPDATE STUDENT PROFILE ──────────────────────────────────────────────────
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { mobile, address, city, state, pincode } = req.body;
+    const updateData = {};
+    if (mobile) updateData.mobile = mobile;
+    if (address) updateData.currentAddress = address;
+    if (city) updateData.city = city;
+    if (state) updateData.state = state;
+    if (pincode) updateData.pincode = pincode;
+
+    const updated = await ParentStudent.findByIdAndUpdate(req.userId, updateData, { new: true }).select('-password').lean();
+    res.status(200).json({ success: true, message: 'Profile updated successfully', data: updated });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // ─── STUDENT PROFILE ──────────────────────────────────────────────────────────
 
 exports.getStudentProfile = async (req, res) => {
@@ -841,8 +1325,8 @@ exports.getStudentProfile = async (req, res) => {
     const user = await getUser(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const studentId = req.query.studentId || user.studentId;
-    if (!studentId) return res.status(400).json({ message: 'studentId required' });
+    const studentId = validateStudentAccess(user, req.query.studentId);
+    if (!studentId) return res.status(403).json({ message: 'Access denied' });
 
     const student = await Student.findById(studentId)
       .populate('class', 'className')
@@ -964,6 +1448,227 @@ exports.getAllUsers = async (req, res) => {
 
     const users = await ParentStudent.find(query).select('-password').sort({ createdAt: -1 }).lean();
     res.status(200).json({ success: true, data: users });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── STAFF: CREATE PARENT CREDENTIALS ──────────────────────────────────────────
+
+exports.createParentCredentials = async (req, res) => {
+  try {
+    const { firstName, lastName, mobile, password, studentId } = req.body;
+    const Admin = require('../model/Admin');
+    const Staff = require('../model/Staff');
+    
+    // Check if user is Admin or Staff
+    let user = await Admin.findById(req.userId).lean();
+    if (!user) {
+      user = await Staff.findById(req.userId).lean();
+    }
+    if (!user) return res.status(403).json({ message: 'Access denied' });
+
+    if (!firstName || !mobile || !password || !studentId) {
+      return res.status(400).json({ message: 'firstName, mobile, password and studentId are required' });
+    }
+
+    // Check if parent already exists for this mobile
+    const existing = await ParentStudent.findOne({ mobile, role: 'parent' });
+    if (existing) {
+      // Add student to existing parent's children
+      if (!existing.children.some(c => c.studentId?.toString() === studentId)) {
+        const student = await Student.findById(studentId).select('firstName lastName class section rollNumber').lean();
+        existing.children.push({
+          studentId,
+          name: `${student.firstName} ${student.lastName}`,
+          class: student.class?.toString(),
+          section: student.section?.toString(),
+          rollNo: student.rollNumber
+        });
+        await existing.save();
+      }
+      return res.status(200).json({ success: true, message: 'Student added to existing parent', data: existing });
+    }
+
+    // Create new parent
+    const student = await Student.findById(studentId).select('firstName lastName class section rollNumber').lean();
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const parent = new ParentStudent({
+      firstName,
+      lastName: lastName || '',
+      mobile,
+      password,
+      role: 'parent',
+      children: [{
+        studentId,
+        name: `${student.firstName} ${student.lastName}`,
+        class: student.class?.toString(),
+        section: student.section?.toString(),
+        rollNo: student.rollNumber
+      }],
+      branch: user.branch,
+      client: user.client,
+      status: true
+    });
+
+    await parent.save();
+    const { password: _, ...parentData } = parent.toObject();
+    res.status(201).json({ success: true, message: 'Parent credentials created successfully', data: parentData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── STAFF: GET PARENT CREDENTIALS BY STUDENT ──────────────────────────────────
+
+exports.getParentCredentialsByStudent = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const Admin = require('../model/Admin');
+    const Staff = require('../model/Staff');
+    
+    // Check if user is Admin or Staff
+    let user = await Admin.findById(req.userId).lean();
+    if (!user) {
+      user = await Staff.findById(req.userId).lean();
+    }
+    if (!user) return res.status(403).json({ message: 'Access denied' });
+
+    // Find parents who have this student in their children
+    const parents = await ParentStudent.find({
+      'children.studentId': studentId,
+      role: 'parent',
+      branch: user.branch
+    }).select('-password').lean();
+
+    res.status(200).json({ success: true, data: parents });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── STAFF: UPDATE PARENT CREDENTIALS ──────────────────────────────────────────
+
+exports.updateParentCredentials = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, mobile, password } = req.body;
+    const Admin = require('../model/Admin');
+    const Staff = require('../model/Staff');
+    
+    // Check if user is Admin or Staff
+    let user = await Admin.findById(req.userId).lean();
+    if (!user) {
+      user = await Staff.findById(req.userId).lean();
+    }
+    if (!user) return res.status(403).json({ message: 'Access denied' });
+
+    const parent = await ParentStudent.findById(id);
+    if (!parent) return res.status(404).json({ message: 'Parent not found' });
+    if (parent.branch.toString() !== user.branch.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (firstName) parent.firstName = firstName;
+    if (lastName) parent.lastName = lastName;
+    if (mobile) parent.mobile = mobile;
+    if (password) parent.password = password;
+
+    await parent.save();
+    const { password: _, ...parentData } = parent.toObject();
+    res.status(200).json({ success: true, message: 'Parent credentials updated successfully', data: parentData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── STAFF: DELETE PARENT CREDENTIALS ──────────────────────────────────────────
+
+exports.deleteParentCredentials = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const Admin = require('../model/Admin');
+    const Staff = require('../model/Staff');
+    
+    // Check if user is Admin or Staff
+    let user = await Admin.findById(req.userId).lean();
+    if (!user) {
+      user = await Staff.findById(req.userId).lean();
+    }
+    if (!user) return res.status(403).json({ message: 'Access denied' });
+
+    const parent = await ParentStudent.findById(id);
+    if (!parent) return res.status(404).json({ message: 'Parent not found' });
+    if (parent.branch.toString() !== user.branch.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    await ParentStudent.findByIdAndDelete(id);
+    res.status(200).json({ success: true, message: 'Parent credentials deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ─── FEE PAYMENT FLOW ────────────────────────────────────────────────────────
+
+exports.initiateFeePayment = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { feeId, amount } = req.body;
+    if (!feeId || !amount) return res.status(400).json({ message: 'feeId and amount required' });
+
+    const transactionId = `PAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    
+    // In a real app, this would integrate with Razorpay/Stripe
+    res.status(200).json({ 
+      success: true, 
+      message: 'Payment initiation successful', 
+      data: {
+        transactionId,
+        amount,
+        feeId,
+        currency: 'INR'
+      } 
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.confirmPayment = async (req, res) => {
+  try {
+    const user = await getUser(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { feeId, amount, transactionId, paymentMode } = req.body;
+    const studentId = user.studentId;
+
+    if (!feeId || !amount) return res.status(400).json({ message: 'Missing fields' });
+
+    // Find a system user to "collect" the payment (e.g. Finance Admin)
+    const Admin = require('../model/Admin');
+    const collector = await Admin.findOne({ role: 'admin', branch: user.branch });
+
+    const payment = new FeeCollection({
+      student: studentId,
+      branch: user.branch,
+      client: user.client,
+      feeType: 'Tuition Fee', // In real app, fetch from fee record
+      amount: amount,
+      amountPaid: amount,
+      balance: 0,
+      paymentMode: paymentMode || 'Online',
+      transactionId: transactionId || `SIM-${Date.now()}`,
+      status: 'paid',
+      collectedBy: collector ? collector._id : user._id
+    });
+
+    await payment.save();
+    res.status(200).json({ success: true, message: 'Payment confirmed and recorded', data: payment });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

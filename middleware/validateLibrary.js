@@ -18,11 +18,25 @@ const validateMember = (req, res, next) => {
 };
 
 const validateBookIssue = (req, res, next) => {
-  const { bookId, memberId, dueDate } = req.body;
-  if (!bookId || !bookId.trim()) return res.status(400).json({ message: 'Book ID is required' });
-  if (!memberId || !memberId.trim()) return res.status(400).json({ message: 'Member ID is required' });
-  if (!dueDate) return res.status(400).json({ message: 'Due date is required' });
-  if (new Date(dueDate) <= new Date()) return res.status(400).json({ message: 'Due date must be in the future' });
+  const { bookId, memberId, studentId, dueDate } = req.body;
+  const memberIdToCheck = memberId || studentId;
+  
+  if (!bookId || (typeof bookId === 'string' && !bookId.trim())) {
+    return res.status(400).json({ success: false, message: 'Please select a book.' });
+  }
+  if (!memberIdToCheck || (typeof memberIdToCheck === 'string' && !memberIdToCheck.trim())) {
+    return res.status(400).json({ success: false, message: 'Please select a member.' });
+  }
+  
+  if (!dueDate) return res.status(400).json({ success: false, message: 'Due date is required.' });
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDate);
+  due.setHours(0, 0, 0, 0);
+  
+  if (isNaN(due.getTime())) return res.status(400).json({ success: false, message: 'Invalid due date format.' });
+  if (due < today) return res.status(400).json({ success: false, message: 'Due date cannot be in the past.' });
   next();
 };
 

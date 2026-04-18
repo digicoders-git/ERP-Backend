@@ -40,10 +40,24 @@ exports.createBranch = async (req, res) => {
       return res.status(400).json({ message: 'Branch code already exists' });
     }
 
-    // Check if email already exists
+    // Check if email already exists in Admin
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ message: 'Email already exists in Admin' });
+    }
+
+    // Check if email already exists in any Staff
+    const Staff = require('../model/Staff');
+    const existingStaff = await Staff.findOne({ email });
+    if (existingStaff) {
+      return res.status(400).json({ message: 'Email already exists in Staff' });
+    }
+
+    // Check if email already exists in any Teacher
+    const Teacher = require('../model/Teacher');
+    const existingTeacher = await Teacher.findOne({ email });
+    if (existingTeacher) {
+      return res.status(400).json({ message: 'Email already exists in Teacher' });
     }
 
     // Create Branch
@@ -118,60 +132,70 @@ exports.createBranch = async (req, res) => {
 // Get All Branches (By Client Admin)
 exports.getAllBranches = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '' } = req.query;
-    const skip = (page - 1) * limit;
+    const { page = 1, limit = 100, search = '' } = req.query;
+    const skip = (page - 1) * parseInt(limit);
     const admin = await Admin.findById(req.userId);
 
-    const searchQuery = search ? {
-      $or: [
+    if (!admin) {
+      return res.status(401).json({ message: 'Admin not found' });
+    }
+
+    let searchQuery = {};
+
+    if (search) {
+      searchQuery.$or = [
         { branchName: { $regex: search, $options: 'i' } },
         { branchCode: { $regex: search, $options: 'i' } },
         { principalName: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } }
-      ]
-    } : {};
-    
-    if (admin.role === 'clientAdmin') {
-      searchQuery.client = admin.client;
-      const branches = await Branch.find(searchQuery)
-        .populate('createdBy', 'email')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
-      
-      const total = await Branch.countDocuments(searchQuery);
-      return res.status(200).json({ 
-        branches, 
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(total / limit)
-        }
-      });
+      ];
     }
 
-    if (admin.role === 'superAdmin') {
-      const branches = await Branch.find(searchQuery)
+    if (admin.role === 'clientAdmin') {
+      searchQuery.client = admin.client;
+    } else if (admin.role === 'branchAdmin') {
+      searchQuery._id = admin.branch;
+    } else if (admin.role !== 'superAdmin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const [branches, total] = await Promise.all([
+      Branch.find(searchQuery)
         .populate('client', 'name')
         .populate('createdBy', 'email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
-      
-      const total = await Branch.countDocuments(searchQuery);
-      return res.status(200).json({ 
-        branches, 
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(total / limit)
-        }
-      });
-    }
+        .limit(parseInt(limit)),
+      Branch.countDocuments(searchQuery)
+    ]);
 
-    return res.status(403).json({ message: 'Access denied' });
+    // Get student and teacher counts for each branch
+    const Student = require('../model/Student');
+    const Teacher = require('../model/Teacher');
+    
+    const branchesWithCounts = await Promise.all(
+      branches.map(async (branch) => {
+        const [studentCount, teacherCount] = await Promise.all([
+          Student.countDocuments({ branch: branch._id }),
+          Teacher.countDocuments({ branch: branch._id })
+        ]);
+        return {
+          ...branch.toObject(),
+          students: studentCount,
+          teachers: teacherCount
+        };
+      })
+    );
+
+    return res.status(200).json({
+      branches: branchesWithCounts,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -203,7 +227,22 @@ exports.getBranchById = async (req, res) => {
     // Get branch admin details
     const branchAdmin = await Admin.findOne({ branch: branchId, role: 'branchAdmin' }).select('-password');
 
-    res.status(200).json({ branch, admin: branchAdmin });
+    // Get student and teacher counts
+    const Student = require('../model/Student');
+    const Teacher = require('../model/Teacher');
+    const [studentCount, teacherCount] = await Promise.all([
+      Student.countDocuments({ branch: branchId }),
+      Teacher.countDocuments({ branch: branchId })
+    ]);
+
+    res.status(200).json({ 
+      branch: {
+        ...branch.toObject(),
+        students: studentCount,
+        teachers: teacherCount
+      }, 
+      admin: branchAdmin 
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

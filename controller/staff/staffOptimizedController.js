@@ -1,15 +1,20 @@
 const Staff = require('../../model/Staff');
+const Admin = require('../../model/Admin');
 const Attendance = require('../../model/Attendance');
 const Leave = require('../../model/Leave');
+const mongoose = require('mongoose');
 
 exports.getAllStaff = async (req, res) => {
   try {
     const { branch, page = 1, limit = 20, search = '', status = 'all' } = req.query;
     const skip = (page - 1) * limit;
-    const adminBranch = req.user?.branch || branch;
+    const adminBranch = req.user?.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user?.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
     const query = {};
     if (adminBranch) query.branch = adminBranch;
+    else if (branch) query.branch = new mongoose.Types.ObjectId(branch);
+    else if (adminClient) query.client = adminClient;
     if (status !== 'all') query.status = status === 'active';
     if (search) {
       query.$or = [
@@ -47,13 +52,17 @@ exports.getAllStaff = async (req, res) => {
 
 exports.getStaffStats = async (req, res) => {
   try {
-    const adminBranch = req.user?.branch;
+    const adminBranch = req.user?.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user?.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
-    const query = {};
-    if (adminBranch) query.branch = adminBranch;
+    const matchQuery = adminBranch
+      ? { branch: adminBranch }
+      : adminClient
+      ? { client: adminClient }
+      : {};
 
     const stats = await Staff.aggregate([
-      { $match: query },
+      { $match: matchQuery },
       {
         $facet: {
           total: [{ $count: 'count' }],
@@ -144,9 +153,15 @@ exports.createStaff = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Required fields missing' });
     }
 
+    // Check if email already exists in Admin
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(400).json({ success: false, message: 'Email already exists in Admin' });
+    }
+
     const existingStaff = await Staff.findOne({ email });
     if (existingStaff) {
-      return res.status(400).json({ success: false, message: 'Email already exists' });
+      return res.status(400).json({ success: false, message: 'Email already exists in Staff' });
     }
 
     const staff = new Staff({
@@ -268,10 +283,12 @@ exports.getStaffLeaves = async (req, res) => {
 
 exports.getStaffDashboard = async (req, res) => {
   try {
-    const adminBranch = req.user?.branch;
+    const adminBranch = req.user?.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user?.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
     const query = {};
     if (adminBranch) query.branch = adminBranch;
+    else if (adminClient) query.client = adminClient;
 
     const [stats, recentStaff, onLeave, todayAttendance] = await Promise.all([
       Staff.aggregate([

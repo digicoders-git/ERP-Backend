@@ -1,12 +1,42 @@
 const TeacherAttendance = require('../../model/TeacherAttendance');
+const Teacher = require('../../model/Teacher');
 const { successResponse, errorResponse } = require('../../responseFormatter');
 
 exports.getAllAttendance = async (req, res) => {
   try {
-    const attendance = await TeacherAttendance.find().sort({ date: -1 });
-    return successResponse(res, attendance, 'Attendance records fetched successfully');
+    const { page = 1, limit = 10, search = '', status } = req.query;
+    const query = {};
+    
+    if (search) {
+      query.$or = [
+        { teacherName: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+
+    const [attendance, total] = await Promise.all([
+      TeacherAttendance.find(query)
+        .populate('teacher', 'name profileImage email')
+        .sort({ date: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit)),
+      TeacherAttendance.countDocuments(query)
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: attendance,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: parseInt(page),
+      message: 'Attendance records fetched successfully'
+    });
   } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
+    console.error('Attendance fetch error:', error);
+    return errorResponse(res, 'Server error: ' + error.message, 500, error);
   }
 };
 
@@ -24,10 +54,16 @@ exports.getAttendanceById = async (req, res) => {
 
 exports.markAttendance = async (req, res) => {
   try {
-    const { teacherName, date, status, checkIn, checkOut, remarks } = req.body;
+    const { teacher, teacherName, date, status, checkIn, checkOut, remarks } = req.body;
 
     if (!teacherName || !date || !status) {
       return errorResponse(res, 'Required fields missing', 400);
+    }
+
+    // Check if teacher exists in database
+    const teacherExists = await Teacher.findOne({ name: teacherName });
+    if (!teacherExists) {
+      return errorResponse(res, 'Teacher not found in database', 404);
     }
 
     let workingHours = 0;
@@ -40,6 +76,7 @@ exports.markAttendance = async (req, res) => {
     }
 
     const attendance = new TeacherAttendance({
+      teacher: teacherExists._id,
       teacherName,
       date: new Date(date),
       status,
@@ -58,14 +95,21 @@ exports.markAttendance = async (req, res) => {
 
 exports.updateAttendance = async (req, res) => {
   try {
-    const { teacherName, date, status, checkIn, checkOut, remarks } = req.body;
+    const { teacher, teacherName, date, status, checkIn, checkOut, remarks } = req.body;
     const attendance = await TeacherAttendance.findById(req.params.id);
 
     if (!attendance) {
       return errorResponse(res, 'Attendance record not found', 404);
     }
 
-    if (teacherName) attendance.teacherName = teacherName;
+    if (teacherName) {
+      const teacherExists = await Teacher.findOne({ name: teacherName });
+      if (!teacherExists) {
+        return errorResponse(res, 'Teacher not found in database', 404);
+      }
+      attendance.teacher = teacherExists._id;
+      attendance.teacherName = teacherName;
+    }
     if (date) attendance.date = new Date(date);
     if (status) attendance.status = status;
     if (remarks) attendance.remarks = remarks;
@@ -142,6 +186,18 @@ exports.getAttendanceByStatus = async (req, res) => {
 
     const attendance = await TeacherAttendance.find({ status });
     return successResponse(res, attendance, `${status} records fetched`);
+  } catch (error) {
+    return errorResponse(res, 'Server error', 500, error);
+  }
+};
+
+exports.getRegisteredTeachers = async (req, res) => {
+  try {
+    const teachers = await Teacher.find({ status: true })
+      .select('_id name email profileImage')
+      .sort({ name: 1 });
+    
+    return successResponse(res, teachers, 'Registered teachers fetched successfully');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }

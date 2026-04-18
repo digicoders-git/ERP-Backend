@@ -7,7 +7,7 @@ const vehicleChecklistSchema = new mongoose.Schema({
   brakes: { type: Boolean, default: null },
   lights: { type: Boolean, default: null },
   horn: { type: Boolean, default: null },
-  fuel: { type: String, enum: ['full', 'three-quarter', 'half', 'quarter', 'empty', ''], default: '' },
+  fuel: { type: Boolean, default: null },
   tyres: { type: Boolean, default: null },
   engine: { type: Boolean, default: null },
   mirrors: { type: Boolean, default: null },

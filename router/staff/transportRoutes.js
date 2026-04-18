@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const t = require('../../controller/staff/transportController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/staffAuth');
 
 // Vehicle
 router.get('/vehicles', auth, t.getAllVehicles);
@@ -38,5 +38,14 @@ router.get('/allocations', auth, t.getAllTransportAllocations);
 router.post('/allocations', auth, t.createTransportAllocation);
 router.put('/allocations/:id', auth, t.updateTransportAllocation);
 router.delete('/allocations/:id', auth, t.deleteTransportAllocation);
+
+// Transport Assignment
+router.get('/assignments', auth, t.getAllAssignments);
+router.post('/assignments', auth, t.createAssignment);
+router.put('/assignments/:id', auth, t.updateAssignment);
+router.delete('/assignments/:id', auth, t.deleteAssignment);
+
+// Dashboard Stats
+router.get('/dashboard', auth, t.getTransportDashboardStats);
 
 module.exports = router;

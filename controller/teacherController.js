@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { generateRandomId } = require('../utils/idGenerator');
 
 // Teacher Login
 exports.teacherLogin = async (req, res) => {
@@ -17,7 +18,6 @@ exports.teacherLogin = async (req, res) => {
       });
     }
 
-    // Find teacher admin by email
     const teacherAdmin = await Admin.findOne({ 
       email, 
       role: 'teacherAdmin' 
@@ -30,7 +30,6 @@ exports.teacherLogin = async (req, res) => {
       });
     }
 
-    // Check if teacher admin is active
     if (!teacherAdmin.status) {
       return res.status(403).json({ 
         success: false,
@@ -38,8 +37,7 @@ exports.teacherLogin = async (req, res) => {
       });
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, teacherAdmin.password);
+    const isPasswordValid = await teacherAdmin.comparePassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({ 
         success: false,
@@ -47,9 +45,10 @@ exports.teacherLogin = async (req, res) => {
       });
     }
 
-    // Get teacher details
     const teacher = await Teacher.findById(teacherAdmin.teacher)
       .populate('branch', 'branchName branchCode address')
+      .populate('assignedClass', 'className')
+      .populate('assignedSection', 'sectionName')
       .lean();
 
     if (!teacher) {
@@ -59,7 +58,6 @@ exports.teacherLogin = async (req, res) => {
       });
     }
 
-    // Check if teacher is active
     if (!teacher.status) {
       return res.status(403).json({ 
         success: false,
@@ -67,7 +65,6 @@ exports.teacherLogin = async (req, res) => {
       });
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       { 
         _id: teacherAdmin._id,
@@ -77,11 +74,10 @@ exports.teacherLogin = async (req, res) => {
         branch: teacherAdmin.branch,
         client: teacherAdmin.client
       },
-      process.env.JWT_SECRET || 'your-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Return success response
     res.status(200).json({
       success: true,
       message: 'Login successful',
@@ -95,6 +91,10 @@ exports.teacherLogin = async (req, res) => {
         subjects: teacher.subjects,
         qualification: teacher.qualification,
         experience: teacher.experience,
+        salary: teacher.salary,
+        address: teacher.address,
+        assignedClass: teacher.assignedClass,
+        assignedSection: teacher.assignedSection,
         branch: teacher.branch,
         status: teacher.status
       }
@@ -109,7 +109,7 @@ exports.teacherLogin = async (req, res) => {
   }
 };
 
-// Get Teacher Profile (for logged-in teacher)
+// Get Teacher Profile
 exports.getTeacherProfile = async (req, res) => {
   try {
     const teacherId = req.user.teacher;
@@ -140,7 +140,7 @@ exports.getTeacherProfile = async (req, res) => {
   }
 };
 
-// Update Teacher Profile (by logged-in teacher)
+// Update Teacher Profile
 exports.updateTeacherProfile = async (req, res) => {
   try {
     const teacherId = req.user.teacher;
@@ -154,22 +154,13 @@ exports.updateTeacherProfile = async (req, res) => {
       });
     }
 
-    // Update allowed fields
     if (mobile) teacher.mobile = mobile;
     if (address !== undefined) teacher.address = address;
     if (qualification !== undefined) teacher.qualification = qualification;
     if (experience !== undefined) teacher.experience = experience;
 
-    // Handle profile image update
     if (req.file) {
-      // Delete old image if exists
-      if (teacher.profileImage) {
-        const oldImagePath = path.join(__dirname, '..', teacher.profileImage);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
-      teacher.profileImage = `/uploads/teacher/${req.file.filename}`;
+      teacher.profileImage = req.file.cloudinaryUrl || `/uploads/teacher/${req.file.filename}`;
     }
 
     await teacher.save();
@@ -189,7 +180,7 @@ exports.updateTeacherProfile = async (req, res) => {
   }
 };
 
-// Change Password (by logged-in teacher)
+// Change Password
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -208,7 +199,6 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Find teacher admin
     const teacherAdmin = await Admin.findById(req.user._id);
     if (!teacherAdmin) {
       return res.status(404).json({ 
@@ -217,8 +207,7 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, teacherAdmin.password);
+    const isPasswordValid = await teacherAdmin.comparePassword(currentPassword);
     if (!isPasswordValid) {
       return res.status(401).json({ 
         success: false,
@@ -226,7 +215,6 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Update password
     teacherAdmin.password = newPassword;
     await teacherAdmin.save();
 
@@ -244,41 +232,50 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// Create Teacher (Only by Branch Admin)
+// Create Teacher
 exports.createTeacher = async (req, res) => {
   try {
-    const { name, email, mobile, password, subjects, qualification, experience, salary, address } = req.body;
+    const { name, email, mobile, password, subjects, qualification, experience, salary, address, assignedClass, assignedSection } = req.body;
+    console.log(`Creating teacher ${name} with email ${email}`);
 
     if (!name || !email || !mobile || !password) {
       return res.status(400).json({ message: 'Name, email, mobile, and password are required' });
     }
 
-    // Get branch admin details
     const branchAdmin = await Admin.findById(req.userId).populate('branch');
     if (!branchAdmin || branchAdmin.role !== 'branchAdmin') {
       return res.status(403).json({ message: 'Only branch admin can create teachers' });
     }
 
-    // Check if email already exists
-    const existingAdmin = await Admin.findOne({ email });
+    // Check if email already exists in Admin (only active teacherAdmin)
+    const existingAdmin = await Admin.findOne({ email, role: 'teacherAdmin', status: true });
     if (existingAdmin) {
+      console.log(`Email ${email} already exists in active Admin`);
       return res.status(400).json({ message: 'Email already exists' });
     }
 
-    // Handle profile image
-    let profileImagePath = null;
-    if (req.file) {
-      profileImagePath = `/uploads/teacher/${req.file.filename}`;
+    // Delete any inactive/deleted admins with this email
+    await Admin.deleteMany({ email, role: 'teacherAdmin', status: false });
+
+    // Check if email already exists in Teacher
+    const existingTeacher = await Teacher.findOne({ email });
+    if (existingTeacher) {
+      console.log(`Email ${email} already exists in Teacher`);
+      return res.status(400).json({ message: 'Email already exists' });
     }
 
-    // Parse subjects if it's a string
+    let profileImagePath = null;
+    if (req.file) {
+      profileImagePath = req.file.cloudinaryUrl || `/uploads/teacher/profile/${req.file.filename}`;
+    }
+
     let subjectsArray = [];
     if (subjects) {
       subjectsArray = typeof subjects === 'string' ? JSON.parse(subjects) : subjects;
     }
 
-    // Create Teacher
     const teacher = new Teacher({
+      customId: generateRandomId(),
       name,
       email,
       mobile,
@@ -291,11 +288,12 @@ exports.createTeacher = async (req, res) => {
       branch: branchAdmin.branch._id,
       client: branchAdmin.client,
       createdBy: req.userId,
-      status: true
+      status: true,
+      assignedClass: assignedClass || null,
+      assignedSection: assignedSection || null
     });
     await teacher.save();
 
-    // Create Teacher Admin
     const teacherAdmin = new Admin({
       email,
       password,
@@ -330,7 +328,6 @@ exports.createTeacher = async (req, res) => {
       }
     });
   } catch (error) {
-    // Delete uploaded file if error occurs
     if (req.file) {
       const filePath = path.join(__dirname, '..', 'uploads', 'teacher', req.file.filename);
       if (fs.existsSync(filePath)) {
@@ -435,13 +432,14 @@ exports.getTeacherById = async (req, res) => {
     const teacher = await Teacher.findById(teacherId)
       .populate('branch', 'branchName branchCode address')
       .populate('client', 'name')
-      .populate('createdBy', 'email');
+      .populate('createdBy', 'email')
+      .populate('assignedClass', 'className classCode stream')
+      .populate('assignedSection', 'sectionName');
 
     if (!teacher) {
       return res.status(404).json({ message: 'Teacher not found' });
     }
 
-    // Check access rights
     if (admin.role === 'branchAdmin' && teacher.branch._id.toString() !== admin.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -454,7 +452,6 @@ exports.getTeacherById = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Get teacher admin details
     const teacherAdmin = await Admin.findOne({ teacher: teacherId, role: 'teacherAdmin' }).select('-password');
 
     res.status(200).json({ teacher, admin: teacherAdmin });
@@ -467,7 +464,7 @@ exports.getTeacherById = async (req, res) => {
 exports.updateTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
-    const { name, mobile, subjects, qualification, experience, salary, address, password } = req.body;
+    const { name, mobile, subjects, qualification, experience, salary, address, password, assignedClass, assignedSection } = req.body;
 
     const admin = await Admin.findById(req.userId);
     if (admin.role !== 'branchAdmin' && admin.role !== 'superAdmin') {
@@ -479,7 +476,6 @@ exports.updateTeacher = async (req, res) => {
       return res.status(404).json({ message: 'Teacher not found' });
     }
 
-    // Check if branch admin owns this teacher
     if (admin.role === 'branchAdmin' && teacher.branch.toString() !== admin.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -493,22 +489,19 @@ exports.updateTeacher = async (req, res) => {
     if (experience !== undefined) teacher.experience = experience;
     if (salary !== undefined) teacher.salary = salary;
     if (address !== undefined) teacher.address = address;
+    if (assignedClass !== undefined) teacher.assignedClass = assignedClass || null;
+    if (assignedSection !== undefined) teacher.assignedSection = assignedSection || null;
 
-    // Handle profile image update
     if (req.file) {
-      // Delete old image if exists
-      if (teacher.profileImage) {
-        const oldImagePath = path.join(__dirname, '..', teacher.profileImage);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
+      if (teacher.profileImage && !teacher.profileImage.startsWith('http')) {
+        const oldPath = path.join(__dirname, '..', teacher.profileImage.replace(/^\//, ''));
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
-      teacher.profileImage = `/uploads/teacher/${req.file.filename}`;
+      teacher.profileImage = req.file.cloudinaryUrl || `/uploads/teacher/profile/${req.file.filename}`;
     }
 
     await teacher.save();
 
-    // Update teacher admin password if provided
     if (password) {
       const teacherAdmin = await Admin.findOne({ teacher: teacherId, role: 'teacherAdmin' });
       if (teacherAdmin) {
@@ -523,7 +516,7 @@ exports.updateTeacher = async (req, res) => {
   }
 };
 
-// Delete Teacher
+// Delete Teacher (PERMANENT DELETE)
 exports.deleteTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
@@ -538,14 +531,13 @@ exports.deleteTeacher = async (req, res) => {
       return res.status(404).json({ message: 'Teacher not found' });
     }
 
-    // Check if branch admin owns this teacher
     if (admin.role === 'branchAdmin' && teacher.branch.toString() !== admin.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
     // Delete profile image if exists
-    if (teacher.profileImage) {
-      const imagePath = path.join(__dirname, '..', teacher.profileImage);
+    if (teacher.profileImage && !teacher.profileImage.startsWith('http')) {
+      const imagePath = path.join(__dirname, '..', teacher.profileImage.replace(/^\//, ''));
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath);
       }
@@ -554,10 +546,10 @@ exports.deleteTeacher = async (req, res) => {
     // Delete teacher admin
     await Admin.deleteOne({ teacher: teacherId, role: 'teacherAdmin' });
 
-    // Delete teacher
+    // Delete teacher permanently
     await Teacher.findByIdAndDelete(teacherId);
 
-    res.status(200).json({ message: 'Teacher and associated admin deleted successfully' });
+    res.status(200).json({ message: 'Teacher deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -578,7 +570,6 @@ exports.toggleTeacherStatus = async (req, res) => {
       return res.status(404).json({ message: 'Teacher not found' });
     }
 
-    // Check if branch admin owns this teacher
     if (admin.role === 'branchAdmin' && teacher.branch.toString() !== admin.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -586,7 +577,6 @@ exports.toggleTeacherStatus = async (req, res) => {
     teacher.status = !teacher.status;
     await teacher.save();
 
-    // Also toggle teacher admin status
     await Admin.updateOne(
       { teacher: teacherId, role: 'teacherAdmin' },
       { status: teacher.status }

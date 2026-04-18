@@ -5,10 +5,9 @@ const Admin = require('../model/Admin');
 exports.createRoomType = async (req, res) => {
   try {
     const { roomTypeName, capacity, monthlyRent, securityDeposit, electricityCharges, effectiveFrom } = req.body;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'branchAdmin') {
+    if (!user || user.role !== 'branchAdmin') {
       return res.status(403).json({ message: 'Only branch admin can create room types' });
     }
 
@@ -19,9 +18,9 @@ exports.createRoomType = async (req, res) => {
       securityDeposit,
       electricityCharges,
       effectiveFrom,
-      branch: admin.branch,
-      client: admin.client,
-      createdBy: adminId
+      branch: user.branch,
+      client: user.client,
+      createdBy: user._id
     });
 
     await newRoomType.save();
@@ -34,20 +33,18 @@ exports.createRoomType = async (req, res) => {
 // Get All Room Types
 exports.getAllRoomTypes = async (req, res) => {
   try {
-    const adminId = req.userId;
-    const admin = await Admin.findById(adminId);
-
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
+    const user = req.user;
+    if (!user) {
+      return res.status(404).json({ message: 'User context not found' });
     }
 
     let roomTypes;
-    if (admin.role === 'branchAdmin') {
-      roomTypes = await RoomType.find({ branch: admin.branch })
+    if (user.role === 'branchAdmin' || user.role === 'warden' || user.role === 'staffAdmin') {
+      roomTypes = await RoomType.find({ branch: user.branch })
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role');
-    } else if (admin.role === 'clientAdmin') {
-      roomTypes = await RoomType.find({ client: admin.client })
+    } else if (user.role === 'clientAdmin') {
+      roomTypes = await RoomType.find({ client: user.client })
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role');
     } else {
@@ -57,7 +54,11 @@ exports.getAllRoomTypes = async (req, res) => {
         .populate('createdBy', 'email role');
     }
 
-    res.status(200).json({ roomTypes });
+    res.status(200).json({ 
+      success: true,
+      data: roomTypes, 
+      roomTypes 
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -67,11 +68,10 @@ exports.getAllRoomTypes = async (req, res) => {
 exports.getRoomTypeById = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
+    if (!user) {
+      return res.status(404).json({ message: 'User context not found' });
     }
 
     const roomType = await RoomType.findById(id)
@@ -83,11 +83,11 @@ exports.getRoomTypeById = async (req, res) => {
       return res.status(404).json({ message: 'Room type not found' });
     }
 
-    if (admin.role === 'branchAdmin' && roomType.branch._id.toString() !== admin.branch.toString()) {
+    if (user.role === 'branchAdmin' && roomType.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (admin.role === 'clientAdmin' && roomType.client._id.toString() !== admin.client.toString()) {
+    if (user.role === 'clientAdmin' && roomType.client.toString() !== user.client.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -102,10 +102,9 @@ exports.updateRoomType = async (req, res) => {
   try {
     const { id } = req.params;
     const { roomTypeName, capacity, monthlyRent, securityDeposit, electricityCharges, effectiveFrom } = req.body;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'branchAdmin') {
+    if (!user || user.role !== 'branchAdmin') {
       return res.status(403).json({ message: 'Only branch admin can update room types' });
     }
 
@@ -114,7 +113,7 @@ exports.updateRoomType = async (req, res) => {
       return res.status(404).json({ message: 'Room type not found' });
     }
 
-    if (roomType.branch.toString() !== admin.branch.toString()) {
+    if (roomType.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -136,10 +135,9 @@ exports.updateRoomType = async (req, res) => {
 exports.deleteRoomType = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'branchAdmin') {
+    if (!user || user.role !== 'branchAdmin') {
       return res.status(403).json({ message: 'Only branch admin can delete room types' });
     }
 
@@ -148,7 +146,7 @@ exports.deleteRoomType = async (req, res) => {
       return res.status(404).json({ message: 'Room type not found' });
     }
 
-    if (roomType.branch.toString() !== admin.branch.toString()) {
+    if (roomType.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -163,10 +161,9 @@ exports.deleteRoomType = async (req, res) => {
 exports.toggleRoomTypeStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'branchAdmin') {
+    if (!user || user.role !== 'branchAdmin') {
       return res.status(403).json({ message: 'Only branch admin can toggle room type status' });
     }
 
@@ -175,7 +172,7 @@ exports.toggleRoomTypeStatus = async (req, res) => {
       return res.status(404).json({ message: 'Room type not found' });
     }
 
-    if (roomType.branch.toString() !== admin.branch.toString()) {
+    if (roomType.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

@@ -1,12 +1,22 @@
 const Student = require('../../model/Student');
 const Admin = require('../../model/Admin');
+const Staff = require('../../model/Staff');
 const QRCode = require('qrcode');
+
+const getUserContext = async (userId) => {
+  let user = await Admin.findById(userId).select('branch client').lean();
+  if (!user) {
+    user = await Staff.findById(userId).select('branch client').lean();
+  }
+  return user;
+};
 
 // Generate ID Card Data
 exports.generateIdCard = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const admin = await getUserContext(req.userId);
+    if (!admin) return res.status(404).json({ message: 'User context not found' });
 
     const student = await Student.findById(studentId)
       .populate('class', 'className')
@@ -65,7 +75,8 @@ exports.generateIdCard = async (req, res) => {
 exports.generateBulkIdCards = async (req, res) => {
   try {
     const { classId, section } = req.query;
-    const admin = await Admin.findById(req.userId).lean();
+    const admin = await getUserContext(req.userId);
+    if (!admin) return res.status(404).json({ message: 'User context not found' });
 
     const query = { branch: admin.branch, status: 'active' };
     if (classId) query.class = classId;
@@ -114,7 +125,8 @@ exports.generateBulkIdCards = async (req, res) => {
 exports.getStudentsForIdCard = async (req, res) => {
   try {
     const { page = 1, limit = 50, classId, section, search = '' } = req.query;
-    const admin = await Admin.findById(req.userId).lean();
+    const admin = await getUserContext(req.userId);
+    if (!admin) return res.status(404).json({ message: 'User context not found' });
     const skip = (page - 1) * limit;
 
     const query = { branch: admin.branch, status: 'active' };

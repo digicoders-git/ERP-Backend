@@ -1,5 +1,7 @@
 const Client = require('../model/Client');
 const Admin = require('../model/Admin');
+const Staff = require('../model/Staff');
+const Teacher = require('../model/Teacher');
 const Plan = require('../model/Plan');
 
 // Create Client with Client Admin
@@ -17,10 +19,22 @@ exports.createClient = async (req, res) => {
       return res.status(404).json({ message: 'Plan not found' });
     }
 
-    // Check if email already exists
+    // Check if email already exists in Admin
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ message: 'Email already exists in Admin' });
+    }
+
+    // Check if email already exists in Staff
+    const existingStaff = await Staff.findOne({ email });
+    if (existingStaff) {
+      return res.status(400).json({ message: 'Email already exists in Staff' });
+    }
+
+    // Check if email already exists in Teacher
+    const existingTeacher = await Teacher.findOne({ email });
+    if (existingTeacher) {
+      return res.status(400).json({ message: 'Email already exists in Teacher' });
     }
 
     // Create Client
@@ -101,10 +115,23 @@ exports.getAllClients = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    const Student = require('../model/Student');
+    
+    // Fetch actual student counts from database
+    const clientsWithCounts = await Promise.all(
+      clients.map(async (client) => {
+        const studentCount = await Student.countDocuments({ client: client._id });
+        return {
+          ...client.toObject(),
+          students: studentCount
+        };
+      })
+    );
+
     const total = await Client.countDocuments(searchQuery);
 
     res.status(200).json({ 
-      clients, 
+      clients: clientsWithCounts, 
       pagination: {
         total,
         page: parseInt(page),

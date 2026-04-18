@@ -1,14 +1,24 @@
 const Student = require('../model/Student');
 const Attendance = require('../model/Attendance');
 const Fee = require('../model/Fee');
+const mongoose = require('mongoose');
 
 exports.getStudentStats = async (req, res) => {
   try {
     const { branch } = req.query;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+
+    const matchQuery = adminBranch
+      ? { branch: adminBranch }
+      : branch
+      ? { branch: new mongoose.Types.ObjectId(branch) }
+      : adminClient
+      ? { client: adminClient }
+      : {};
 
     const stats = await Student.aggregate([
-      { $match: { branch: adminBranch || branch } },
+      { $match: matchQuery },
       {
         $facet: {
           total: [{ $count: 'count' }],
@@ -40,9 +50,13 @@ exports.getStudents = async (req, res) => {
   try {
     const { branch, page = 1, limit = 20, search = '', status = 'all' } = req.query;
     const skip = (page - 1) * limit;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
-    const query = { branch: adminBranch || branch };
+    const query = {};
+    if (adminBranch) query.branch = adminBranch;
+    else if (branch) query.branch = new mongoose.Types.ObjectId(branch);
+    else if (adminClient) query.client = adminClient;
     if (status !== 'all') query.status = status;
     if (search) {
       query.$or = [
@@ -182,11 +196,13 @@ exports.getStudentFeeStatus = async (req, res) => {
 
 exports.getStudentDashboard = async (req, res) => {
   try {
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const matchQuery = adminBranch ? { branch: adminBranch } : adminClient ? { client: adminClient } : {};
 
     const [stats, recentStudents, activeStudents, totalEnrolled] = await Promise.all([
       Student.aggregate([
-        { $match: { branch: adminBranch } },
+        { $match: matchQuery },
         {
           $facet: {
             total: [{ $count: 'count' }],
@@ -195,13 +211,13 @@ exports.getStudentDashboard = async (req, res) => {
           }
         }
       ]),
-      Student.find({ branch: adminBranch, status: 'active' })
+      Student.find({ ...matchQuery, status: 'active' })
         .select('firstName email admissionNumber')
         .sort({ createdAt: -1 })
         .limit(5)
         .lean(),
-      Student.countDocuments({ branch: adminBranch, status: 'active' }),
-      Student.countDocuments({ branch: adminBranch, applicationStatus: 'enrolled' })
+      Student.countDocuments({ ...matchQuery, status: 'active' }),
+      Student.countDocuments({ ...matchQuery, applicationStatus: 'enrolled' })
     ]);
 
     res.status(200).json({

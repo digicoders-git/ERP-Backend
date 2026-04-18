@@ -21,6 +21,27 @@ const quizSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  class: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class'
+  },
+  section: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Section'
+  },
+  attempts: {
+    type: Number,
+    default: 0
+  },
+  avgScore: {
+    type: Number,
+    default: 0
+  },
+  status: {
+    type: String,
+    enum: ['Active', 'Inactive'],
+    default: 'Active'
+  },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Branch',

@@ -11,23 +11,28 @@ const noticeSchema = new mongoose.Schema({
     enum: ['general', 'academic', 'event', 'urgent', 'holiday'],
     required: true
   },
+  targetAudience: [{
+    type: String,
+    enum: ['student', 'teacher', 'parent', 'staff', 'admin', 'driver', 'fee_manager'],
+    default: ['student']
+  }],
   class: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: 'All'
   },
   priority: {
     type: String,
-    enum: ['normal', 'medium', 'high'],
-    required: true
+    enum: ['low', 'normal', 'medium', 'high'],
+    default: 'normal'
   },
   publishDate: {
     type: Date,
-    required: true
+    default: Date.now
   },
   expiryDate: {
     type: Date,
-    required: true
+    default: () => new Date(+new Date() + 30*24*60*60*1000) // 30 days default
   },
   content: {
     type: String,

@@ -7,11 +7,10 @@ const Admin = require('../model/Admin');
 exports.createRoom = async (req, res) => {
   try {
     const { hostelId, floorNo, roomNo, roomTypeId, capacity, monthlyRent } = req.body;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
-      return res.status(403).json({ message: 'Only branch admin or staff can create rooms' });
+    if (!user || (!['branchAdmin', 'staffAdmin', 'superAdmin'].includes(user.role))) {
+      return res.status(403).json({ message: 'Only admins or staff can create rooms' });
     }
 
     const hostel = await Hostel.findById(hostelId);
@@ -19,7 +18,7 @@ exports.createRoom = async (req, res) => {
       return res.status(404).json({ message: 'Hostel not found' });
     }
 
-    if (hostel.branch.toString() !== admin.branch.toString()) {
+    if (hostel.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Hostel does not belong to your branch' });
     }
 
@@ -28,7 +27,7 @@ exports.createRoom = async (req, res) => {
       return res.status(404).json({ message: 'Room type not found' });
     }
 
-    if (roomType.branch.toString() !== admin.branch.toString()) {
+    if (roomType.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Room type does not belong to your branch' });
     }
 
@@ -44,9 +43,9 @@ exports.createRoom = async (req, res) => {
       roomType: roomTypeId,
       capacity,
       monthlyRent,
-      branch: admin.branch,
-      client: admin.client,
-      createdBy: adminId
+      branch: user.branch,
+      client: user.client,
+      createdBy: user._id
     });
 
     await newRoom.save();
@@ -61,11 +60,10 @@ exports.getAllRooms = async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '' } = req.query;
     const skip = (page - 1) * limit;
-    const adminId = req.userId;
-    const admin = await Admin.findById(adminId);
+    const user = req.user;
 
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
+    if (!user) {
+      return res.status(404).json({ message: 'User context not found' });
     }
 
     const searchQuery = search ? {
@@ -74,43 +72,30 @@ exports.getAllRooms = async (req, res) => {
       ]
     } : {};
 
-    let rooms, total;
-    if (admin.role === 'branchAdmin' || admin.role === 'staffAdmin') {
-      searchQuery.branch = admin.branch;
-      rooms = await Room.find(searchQuery)
-        .populate('hostel', 'hostelName hostelCode')
-        .populate('roomType', 'roomTypeName')
-        .populate('branch', 'branchName branchCode')
-        .populate('createdBy', 'email role')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
-      total = await Room.countDocuments(searchQuery);
-    } else if (admin.role === 'clientAdmin') {
-      searchQuery.client = admin.client;
-      rooms = await Room.find(searchQuery)
-        .populate('hostel', 'hostelName hostelCode')
-        .populate('roomType', 'roomTypeName')
-        .populate('branch', 'branchName branchCode')
-        .populate('createdBy', 'email role')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
-      total = await Room.countDocuments(searchQuery);
-    } else {
-      rooms = await Room.find(searchQuery)
-        .populate('hostel', 'hostelName hostelCode')
-        .populate('roomType', 'roomTypeName')
-        .populate('branch', 'branchName branchCode')
-        .populate('client', 'name')
-        .populate('createdBy', 'email role')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit));
-      total = await Room.countDocuments(searchQuery);
+    // Permission Based Filtering
+    if (user.role === 'branchAdmin' || user.role === 'staffAdmin' || user.role === 'warden') {
+      searchQuery.branch = user.branch;
+      if (user.role === 'warden' && user.assignedHostel) {
+        searchQuery.hostel = user.assignedHostel;
+      }
+    } else if (user.role === 'clientAdmin') {
+      searchQuery.client = user.client;
     }
 
+    const rooms = await Room.find(searchQuery)
+      .populate('hostel', 'hostelName hostelCode')
+      .populate('roomType', 'roomTypeName')
+      .populate('branch', 'branchName branchCode')
+      .populate('createdBy', 'email role')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    const total = await Room.countDocuments(searchQuery);
+
     res.status(200).json({ 
+      success: true,
+      data: rooms,
       rooms, 
       pagination: {
         total,
@@ -128,11 +113,10 @@ exports.getAllRooms = async (req, res) => {
 exports.getRoomById = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
+    if (!user) {
+      return res.status(404).json({ message: 'User context not found' });
     }
 
     const room = await Room.findById(id)
@@ -146,11 +130,15 @@ exports.getRoomById = async (req, res) => {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    if (admin.role === 'branchAdmin' && room.branch._id.toString() !== admin.branch.toString()) {
+    if (user.role === 'branchAdmin' && room.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (admin.role === 'clientAdmin' && room.client._id.toString() !== admin.client.toString()) {
+    if (user.role === 'warden' && room.hostel.toString() !== user.assignedHostel.toString()) {
+      return res.status(403).json({ message: 'Access denied to this hostel room' });
+    }
+
+    if (user.role === 'clientAdmin' && room.client.toString() !== user.client.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -165,10 +153,9 @@ exports.updateRoom = async (req, res) => {
   try {
     const { id } = req.params;
     const { hostelId, floorNo, roomNo, roomTypeId, capacity, monthlyRent } = req.body;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
+    if (!user || (!['branchAdmin', 'staffAdmin'].includes(user.role))) {
       return res.status(403).json({ message: 'Only branch admin or staff can update rooms' });
     }
 
@@ -177,16 +164,14 @@ exports.updateRoom = async (req, res) => {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    if (room.branch.toString() !== admin.branch.toString()) {
+    if (room.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
     if (hostelId && hostelId !== room.hostel.toString()) {
       const hostel = await Hostel.findById(hostelId);
-      if (!hostel) {
-        return res.status(404).json({ message: 'Hostel not found' });
-      }
-      if (hostel.branch.toString() !== admin.branch.toString()) {
+      if (!hostel) return res.status(404).json({ message: 'Hostel not found' });
+      if (hostel.branch.toString() !== user.branch.toString()) {
         return res.status(403).json({ message: 'Hostel does not belong to your branch' });
       }
       room.hostel = hostelId;
@@ -194,10 +179,8 @@ exports.updateRoom = async (req, res) => {
 
     if (roomTypeId && roomTypeId !== room.roomType.toString()) {
       const roomType = await RoomType.findById(roomTypeId);
-      if (!roomType) {
-        return res.status(404).json({ message: 'Room type not found' });
-      }
-      if (roomType.branch.toString() !== admin.branch.toString()) {
+      if (!roomType) return res.status(404).json({ message: 'Room type not found' });
+      if (roomType.branch.toString() !== user.branch.toString()) {
         return res.status(403).json({ message: 'Room type does not belong to your branch' });
       }
       room.roomType = roomTypeId;
@@ -208,7 +191,6 @@ exports.updateRoom = async (req, res) => {
     if (capacity) room.capacity = capacity;
     if (monthlyRent !== undefined) room.monthlyRent = monthlyRent;
 
-    // Check duplicate on update (exclude current room)
     const targetHostel = hostelId || room.hostel.toString();
     const targetFloor = floorNo !== undefined ? floorNo : room.floorNo;
     const targetRoomNo = roomNo || room.roomNo;
@@ -228,10 +210,9 @@ exports.updateRoom = async (req, res) => {
 exports.deleteRoom = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
+    if (!user || (!['branchAdmin', 'staffAdmin'].includes(user.role))) {
       return res.status(403).json({ message: 'Only branch admin or staff can delete rooms' });
     }
 
@@ -240,7 +221,7 @@ exports.deleteRoom = async (req, res) => {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    if (room.branch.toString() !== admin.branch.toString()) {
+    if (room.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -256,15 +237,14 @@ exports.updateRoomStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const adminId = req.userId;
+    const user = req.user;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
-      return res.status(403).json({ message: 'Only branch admin or staff can update room status' });
+    if (!user || (!['branchAdmin', 'staffAdmin', 'warden'].includes(user.role))) {
+      return res.status(403).json({ message: 'Permission denied to update status' });
     }
 
     if (!['available', 'occupied', 'maintenance'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status. Must be available, occupied, or maintenance' });
+      return res.status(400).json({ message: 'Invalid status' });
     }
 
     const room = await Room.findById(id);
@@ -272,8 +252,12 @@ exports.updateRoomStatus = async (req, res) => {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    if (room.branch.toString() !== admin.branch.toString()) {
+    if (user.role === 'branchAdmin' && room.branch.toString() !== user.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    if (user.role === 'warden' && room.hostel.toString() !== user.assignedHostel.toString()) {
+      return res.status(403).json({ message: 'Access denied to this hostel' });
     }
 
     room.status = status;

@@ -21,4 +21,7 @@ router.get('/templates', auth, parentAlertsController.getAlertTemplates);
 // Get absent students for alerts
 router.get('/absent-students', auth, parentAlertsController.getAbsentStudents);
 
+// Get all class students for alerts
+router.get('/class-students', auth, parentAlertsController.getClassStudents);
+
 module.exports = router;

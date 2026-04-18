@@ -26,6 +26,18 @@ const videoClassSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  class: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class'
+  },
+  section: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Section'
+  },
+  views: {
+    type: Number,
+    default: 0
+  },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Branch',

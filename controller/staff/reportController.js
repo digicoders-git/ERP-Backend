@@ -7,16 +7,20 @@ const Route = require('../../model/Route');
 const TransportAllocation = require('../../model/TransportAllocation');
 const Driver = require('../../model/Driver');
 const Admin = require('../../model/Admin');
+const Approval = require('../../model/Approval');
+const Class = require('../../model/Class');
+const Section = require('../../model/Section');
+const Student = require('../../model/Student');
 
 const getBranch = async (userId) => {
-  const admin = await Admin.findById(userId).select('branch').lean();
-  return admin?.branch || null;
+  const admin = await Admin.findById(userId).select('branch client').lean();
+  return { branch: admin?.branch, client: admin?.client };
 };
 
 // Hostel Dashboard
 exports.getHostelDashboard = async (req, res) => {
   try {
-    const branch = await getBranch(req.userId);
+    const { branch } = await getBranch(req.userId);
 
     const [
       totalHostels,
@@ -30,13 +34,12 @@ exports.getHostelDashboard = async (req, res) => {
       Hostel.countDocuments({ branch }),
       Room.countDocuments({ branch }),
       Room.countDocuments({ branch, status: 'occupied' }),
-      HostelAllocation.countDocuments({ branch, allocationStatus: 'allocated' }),
+      HostelAllocation.countDocuments({ branch }),
       Warden.countDocuments({ branch }),
       HostelAllocation.find({ branch })
         .populate('hostel', 'hostelName type')
         .sort({ createdAt: -1 })
         .limit(10)
-        .select('studentId studentName roomNo joiningDate monthlyRent allocationStatus hostel')
         .lean(),
       Hostel.aggregate([
         { $match: { branch } },
@@ -283,6 +286,43 @@ exports.getAttendanceReport = async (req, res) => {
         limit: parseInt(limit),
         totalPages: Math.ceil(total / limit)
       }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Overview Dashboard Stats
+exports.getOverviewStats = async (req, res) => {
+  try {
+    const { branch, client } = await getBranch(req.userId);
+
+    const [
+      totalStudents,
+      totalClasses,
+      totalSections,
+      totalTeachers,
+      totalStaff,
+      pendingApprovals,
+      approvals
+    ] = await Promise.all([
+      Student.countDocuments({ branch, status: true }),
+      Class.countDocuments({ branch }),
+      Section.countDocuments({ branch }),
+      Admin.countDocuments({ branch, role: 'teacher' }),
+      Admin.countDocuments({ branch, role: 'staff' }),
+      Approval.countDocuments({ branch, status: 'Pending' }),
+      Approval.find({ branch }).sort({ createdAt: -1 }).limit(10).lean()
+    ]);
+
+    res.status(200).json({
+      totalStudents,
+      totalClasses,
+      totalSections,
+      totalTeachers,
+      totalStaff,
+      pendingApprovals,
+      approvals
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

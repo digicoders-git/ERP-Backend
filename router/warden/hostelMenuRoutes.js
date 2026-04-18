@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const hostelMenuController = require('../../controller/warden/hostelMenuController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/wardenAuth');
 
 router.post('/add', auth, hostelMenuController.addMenu);
 router.get('/all', auth, hostelMenuController.getAllMenus);

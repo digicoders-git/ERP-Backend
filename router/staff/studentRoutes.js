@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const studentController = require('../../controller/staff/studentController');
-const auth = require('../../middleware/auth');
-const upload = require('../../middleware/uploadStudent');
+const flexibleAuth = require('../../middleware/flexibleAuth');
+const { upload, setStudentHeaders, cloudinaryUpload } = require('../../middleware/uploadStudent');
 
 const uploadFields = upload.fields([
   { name: 'marksheet', maxCount: 1 },
@@ -12,13 +12,14 @@ const uploadFields = upload.fields([
   { name: 'aadharCard', maxCount: 1 }
 ]);
 
-router.get('/profile/:id', auth, studentController.getStudentProfile);
-router.get('/applications', auth, studentController.getAllApplications);
-router.get('/verification-list', auth, studentController.getVerificationList);
-router.put('/verify/:id', auth, studentController.verifyStudent);
-router.get('/enrollment-list', auth, studentController.getEnrollmentList);
-router.put('/enroll/:id', auth, studentController.enrollStudent);
-router.put('/documents/:id', auth, uploadFields, studentController.uploadDocuments);
-router.get('/documents', auth, studentController.getAllDocuments);
+router.get('/profile/:id', flexibleAuth, studentController.getStudentProfile);
+router.get('/applications', flexibleAuth, studentController.getAllApplications);
+router.get('/verification-list', flexibleAuth, studentController.getVerificationList);
+router.put('/verify/:id', flexibleAuth, studentController.verifyStudent);
+router.get('/enrollment-list', flexibleAuth, studentController.getEnrollmentList);
+router.put('/enroll/:id', flexibleAuth, studentController.enrollStudent);
+router.put('/documents/status/:id', flexibleAuth, studentController.updateDocumentStatus);
+router.put('/documents/:id', flexibleAuth, setStudentHeaders, uploadFields, cloudinaryUpload, studentController.uploadDocuments);
+router.get('/documents', flexibleAuth, studentController.getAllDocuments);
 
 module.exports = router;

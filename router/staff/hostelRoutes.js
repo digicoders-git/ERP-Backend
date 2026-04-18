@@ -1,33 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const h = require('../../controller/staff/hostelController');
-const auth = require('../../middleware/auth');
+const flexibleAuth = require('../../middleware/flexibleAuth');
+const hostelController = require('../../controller/staff/hostelController');
 
-// Hostel
-router.get('/hostels', auth, h.getAllHostels);
-router.post('/hostels', auth, h.createHostel);
-router.put('/hostels/:id', auth, h.updateHostel);
-router.delete('/hostels/:id', auth, h.deleteHostel);
+// Hostel Routes
+router.get('/hostels', flexibleAuth, hostelController.getAllHostels);
+router.post('/hostels', flexibleAuth, hostelController.createHostel);
+router.put('/hostels/:id', flexibleAuth, hostelController.updateHostel);
+router.delete('/hostels/:id', flexibleAuth, hostelController.deleteHostel);
 
-// Room Type
-router.get('/room-types', auth, h.getAllRoomTypes);
-router.post('/room-types', auth, h.createRoomType);
-router.put('/room-types/:id', auth, h.updateRoomType);
-router.delete('/room-types/:id', auth, h.deleteRoomType);
+// Room Types Routes
+router.get('/room-types', flexibleAuth, hostelController.getAllRoomTypes);
 
-// Room
-router.get('/rooms', auth, h.getAllRooms);
-router.post('/rooms', auth, h.createRoom);
-router.put('/rooms/:id', auth, h.updateRoom);
-router.delete('/rooms/:id', auth, h.deleteRoom);
+// Rooms Routes
+router.get('/rooms', flexibleAuth, hostelController.getAllRooms);
+router.post('/rooms', flexibleAuth, hostelController.createRoom);
+router.put('/rooms/:id', flexibleAuth, hostelController.updateRoom);
+router.delete('/rooms/:id', flexibleAuth, hostelController.deleteRoom);
 
-// Allocation
-router.get('/allocations', auth, h.getAllAllocations);
-router.post('/allocations', auth, h.createAllocation);
-router.put('/allocations/:id', auth, h.updateAllocation);
-router.delete('/allocations/:id', auth, h.deleteAllocation);
+// Allocations Routes
+router.get('/allocations', flexibleAuth, hostelController.getAllAllocations);
+router.post('/allocations', flexibleAuth, hostelController.createAllocation);
+router.put('/allocations/:id', flexibleAuth, hostelController.updateAllocation);
+router.delete('/allocations/:id', flexibleAuth, hostelController.deleteAllocation);
 
-// Warden (read only from staff panel)
-router.get('/wardens', auth, h.getAllWardens);
+// Wardens Routes
+router.get('/wardens', flexibleAuth, hostelController.getAllWardens);
+router.post('/wardens', flexibleAuth, hostelController.createWarden);
+router.put('/wardens/:id', flexibleAuth, hostelController.updateWarden);
+router.delete('/wardens/:id', flexibleAuth, hostelController.deleteWarden);
 
 module.exports = router;

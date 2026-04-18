@@ -10,6 +10,7 @@ router.post('/return', auth, ctrl.returnBookByBarcode);
 router.post('/quick-action', auth, ctrl.quickScanAction);
 
 // Fine management
+router.get('/fines', auth, ctrl.getAllFines);
 router.get('/calculate-overdue', auth, ctrl.calculateOverdueFines);
 router.get('/send-notifications', auth, ctrl.sendOverdueNotifications);
 router.post('/waive', auth, ctrl.waiveFine);

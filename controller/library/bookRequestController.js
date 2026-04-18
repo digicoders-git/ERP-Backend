@@ -1,27 +1,49 @@
 const BookRequest = require('../../model/BookRequest');
+const Admin = require('../../model/Admin');
 const { successResponse, errorResponse } = require('../../responseFormatter');
 
 exports.getAllRequests = async (req, res) => {
   try {
-    const requests = await BookRequest.find()
+    const adminId = req.userId;
+    
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
+    const requests = await BookRequest.find({ branch: admin.branch })
       .populate('student', 'name email')
       .populate('book', 'title author')
-      .sort({ requestDate: -1 });
+      .sort({ requestDate: -1 })
+      .lean();
     
     return successResponse(res, requests, 'Book requests fetched successfully');
   } catch (error) {
+    console.error('Error fetching book requests:', error);
     return errorResponse(res, 'Server error', 500, error);
   }
 };
 
 exports.getRequestById = async (req, res) => {
   try {
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
     const request = await BookRequest.findById(req.params.id)
       .populate('student', 'name email')
-      .populate('book', 'title author');
+      .populate('book', 'title author')
+      .lean();
     
     if (!request) {
       return errorResponse(res, 'Book request not found', 404);
+    }
+
+    if (request.branch.toString() !== admin.branch.toString()) {
+      return errorResponse(res, 'Access denied', 403);
     }
     
     return successResponse(res, request, 'Book request fetched successfully');
@@ -32,10 +54,16 @@ exports.getRequestById = async (req, res) => {
 
 exports.createRequest = async (req, res) => {
   try {
-    const { studentName, studentId, bookTitle, priority, branch, client } = req.body;
+    const { studentName, studentId, bookTitle, priority } = req.body;
+    const adminId = req.userId;
 
     if (!studentName || !studentId || !bookTitle) {
       return errorResponse(res, 'Required fields missing', 400);
+    }
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
     }
 
     const request = new BookRequest({
@@ -45,8 +73,8 @@ exports.createRequest = async (req, res) => {
       priority: priority || 'Medium',
       status: 'Pending',
       requestDate: new Date(),
-      branch: branch || undefined,
-      client: client || undefined
+      branch: admin.branch,
+      client: admin.client
     });
 
     await request.save();
@@ -59,14 +87,25 @@ exports.createRequest = async (req, res) => {
 exports.approveRequest = async (req, res) => {
   try {
     const { approvedBy } = req.body;
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
     const request = await BookRequest.findById(req.params.id);
 
     if (!request) {
       return errorResponse(res, 'Book request not found', 404);
     }
 
+    if (request.branch.toString() !== admin.branch.toString()) {
+      return errorResponse(res, 'Access denied', 403);
+    }
+
     request.status = 'Approved';
-    request.approvedBy = approvedBy || 'Librarian';
+    request.approvedBy = approvedBy || admin.name || 'Librarian';
     request.approvalDate = new Date();
 
     await request.save();
@@ -79,15 +118,26 @@ exports.approveRequest = async (req, res) => {
 exports.rejectRequest = async (req, res) => {
   try {
     const { rejectionReason, approvedBy } = req.body;
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
     const request = await BookRequest.findById(req.params.id);
 
     if (!request) {
       return errorResponse(res, 'Book request not found', 404);
     }
 
+    if (request.branch.toString() !== admin.branch.toString()) {
+      return errorResponse(res, 'Access denied', 403);
+    }
+
     request.status = 'Rejected';
     request.rejectionReason = rejectionReason || 'Not available';
-    request.approvedBy = approvedBy || 'Librarian';
+    request.approvedBy = approvedBy || admin.name || 'Librarian';
     request.approvalDate = new Date();
 
     await request.save();
@@ -99,10 +149,21 @@ exports.rejectRequest = async (req, res) => {
 
 exports.fulfillRequest = async (req, res) => {
   try {
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
     const request = await BookRequest.findById(req.params.id);
 
     if (!request) {
       return errorResponse(res, 'Book request not found', 404);
+    }
+
+    if (request.branch.toString() !== admin.branch.toString()) {
+      return errorResponse(res, 'Access denied', 403);
     }
 
     if (request.status !== 'Approved') {
@@ -121,15 +182,22 @@ exports.fulfillRequest = async (req, res) => {
 exports.getRequestsByStatus = async (req, res) => {
   try {
     const { status } = req.params;
+    const adminId = req.userId;
 
     if (!['Pending', 'Approved', 'Rejected', 'Fulfilled'].includes(status)) {
       return errorResponse(res, 'Invalid status', 400);
     }
 
-    const requests = await BookRequest.find({ status })
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
+    const requests = await BookRequest.find({ status, branch: admin.branch })
       .populate('student', 'name email')
       .populate('book', 'title author')
-      .sort({ requestDate: -1 });
+      .sort({ requestDate: -1 })
+      .lean();
 
     return successResponse(res, requests, `${status} requests fetched`);
   } catch (error) {
@@ -140,10 +208,17 @@ exports.getRequestsByStatus = async (req, res) => {
 exports.getRequestsByStudent = async (req, res) => {
   try {
     const { studentId } = req.params;
+    const adminId = req.userId;
 
-    const requests = await BookRequest.find({ studentId })
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
+    const requests = await BookRequest.find({ studentId, branch: admin.branch })
       .populate('book', 'title author')
-      .sort({ requestDate: -1 });
+      .sort({ requestDate: -1 })
+      .lean();
 
     return successResponse(res, requests, 'Student requests fetched');
   } catch (error) {
@@ -153,11 +228,24 @@ exports.getRequestsByStudent = async (req, res) => {
 
 exports.deleteRequest = async (req, res) => {
   try {
-    const request = await BookRequest.findByIdAndDelete(req.params.id);
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
+    const request = await BookRequest.findById(req.params.id);
 
     if (!request) {
       return errorResponse(res, 'Book request not found', 404);
     }
+
+    if (request.branch.toString() !== admin.branch.toString()) {
+      return errorResponse(res, 'Access denied', 403);
+    }
+
+    await BookRequest.findByIdAndDelete(req.params.id);
 
     return successResponse(res, null, 'Book request deleted successfully');
   } catch (error) {
@@ -167,11 +255,19 @@ exports.deleteRequest = async (req, res) => {
 
 exports.getRequestStats = async (req, res) => {
   try {
-    const totalRequests = await BookRequest.countDocuments();
-    const pendingRequests = await BookRequest.countDocuments({ status: 'Pending' });
-    const approvedRequests = await BookRequest.countDocuments({ status: 'Approved' });
-    const rejectedRequests = await BookRequest.countDocuments({ status: 'Rejected' });
-    const fulfilledRequests = await BookRequest.countDocuments({ status: 'Fulfilled' });
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return errorResponse(res, 'Admin not found', 404);
+    }
+
+    const query = { branch: admin.branch };
+    const totalRequests = await BookRequest.countDocuments(query);
+    const pendingRequests = await BookRequest.countDocuments({ ...query, status: 'Pending' });
+    const approvedRequests = await BookRequest.countDocuments({ ...query, status: 'Approved' });
+    const rejectedRequests = await BookRequest.countDocuments({ ...query, status: 'Rejected' });
+    const fulfilledRequests = await BookRequest.countDocuments({ ...query, status: 'Fulfilled' });
 
     const stats = {
       totalRequests,

@@ -16,6 +16,16 @@ const routeStopSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  stopLocation: {
+    type: String,
+    trim: true
+  },
+  latitude: {
+    type: Number
+  },
+  longitude: {
+    type: Number
+  },
   pickupTime: {
     type: String,
     required: true,
@@ -25,6 +35,14 @@ const routeStopSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
+  },
+  waitingTime: {
+    type: Number, // in minutes
+    default: 5
+  },
+  status: {
+    type: Boolean,
+    default: true
   },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
@@ -42,5 +60,8 @@ const routeStopSchema = new mongoose.Schema({
     required: true
   }
 }, { timestamps: true });
+
+// Geospatial index for location-based queries
+routeStopSchema.index({ latitude: 1, longitude: 1 });
 
 module.exports = mongoose.model('RouteStop', routeStopSchema);

@@ -11,15 +11,27 @@ const hostelMenuSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  breakfastTime: {
+    type: String,
+    default: '07:00'
+  },
   lunch: {
     type: String,
     required: true,
     trim: true
   },
+  lunchTime: {
+    type: String,
+    default: '12:30'
+  },
   dinner: {
     type: String,
     required: true,
     trim: true
+  },
+  dinnerTime: {
+    type: String,
+    default: '19:00'
   },
   branch: {
     type: mongoose.Schema.Types.ObjectId,

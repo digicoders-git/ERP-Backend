@@ -67,7 +67,7 @@ exports.getAllSections = async (req, res) => {
     if (admin.role === 'branchAdmin') {
       searchQuery.branch = admin.branch;
       sections = await Section.find(searchQuery)
-        .populate('assignToClass', 'className classCode')
+        .populate('assignToClass', 'className classCode stream')
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
@@ -77,7 +77,7 @@ exports.getAllSections = async (req, res) => {
     } else if (admin.role === 'clientAdmin') {
       searchQuery.client = admin.client;
       sections = await Section.find(searchQuery)
-        .populate('assignToClass', 'className classCode')
+        .populate('assignToClass', 'className classCode stream')
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
@@ -86,7 +86,7 @@ exports.getAllSections = async (req, res) => {
       total = await Section.countDocuments(searchQuery);
     } else {
       sections = await Section.find(searchQuery)
-        .populate('assignToClass', 'className classCode')
+        .populate('assignToClass', 'className classCode stream')
         .populate('branch', 'branchName branchCode')
         .populate('client', 'name')
         .populate('createdBy', 'email role')
@@ -122,7 +122,7 @@ exports.getSectionById = async (req, res) => {
     }
 
     const section = await Section.findById(id)
-      .populate('assignToClass', 'className classCode classCapacity')
+      .populate('assignToClass', 'className classCode classCapacity stream')
       .populate('branch', 'branchName branchCode')
       .populate('client', 'name')
       .populate('createdBy', 'email role');

@@ -2,10 +2,17 @@ const Attendance = require('../model/Attendance');
 const Student = require('../model/Student');
 const Staff = require('../model/Staff');
 const Admin = require('../model/Admin');
+const Class = require('../model/Class');
+const mongoose = require('mongoose');
 
 const getBranch = async (userId) => {
-  const admin = await Admin.findById(userId).select('branch').lean();
-  return admin?.branch || null;
+  // Try Admin first
+  let user = await Admin.findById(userId).select('branch').lean();
+  if (user?.branch) return user.branch;
+  
+  // Try Staff if not found in Admin
+  user = await Staff.findById(userId).select('branch').lean();
+  return user?.branch || null;
 };
 
 // Mark Bulk Attendance (students or staff)
@@ -106,16 +113,21 @@ exports.getAttendanceReport = async (req, res) => {
     const branch = await getBranch(req.userId);
     if (!branch) return res.status(403).json({ message: 'Access denied' });
 
-    const { type, fromDate, toDate, classId } = req.query;
-    if (!type || !fromDate || !toDate) return res.status(400).json({ message: 'type, fromDate, toDate required' });
+    const { type, fromDate, toDate, startDate, endDate, classId } = req.query;
+    const finalFrom = fromDate || startDate;
+    const finalTo = toDate || endDate;
 
-    const start = new Date(fromDate); start.setHours(0, 0, 0, 0);
-    const end = new Date(toDate); end.setHours(23, 59, 59, 999);
+    if (!type || !finalFrom || !finalTo) return res.status(400).json({ message: 'type, fromDate, toDate required' });
+
+    const start = new Date(finalFrom); start.setHours(0, 0, 0, 0);
+    const end = new Date(finalTo); end.setHours(23, 59, 59, 999);
 
     const matchQuery = { branch, type, date: { $gte: start, $lte: end } };
-    if (classId) matchQuery.classId = new require('mongoose').Types.ObjectId(classId);
+    if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+      matchQuery.classId = new mongoose.Types.ObjectId(classId);
+    }
 
-    const [summary, daily] = await Promise.all([
+    const [summary, daily, details, classTotals] = await Promise.all([
       Attendance.aggregate([
         { $match: matchQuery },
         { $group: { _id: '$status', count: { $sum: 1 } } }
@@ -124,13 +136,61 @@ exports.getAttendanceReport = async (req, res) => {
         { $match: matchQuery },
         { $group: { _id: { date: '$date', status: '$status' }, count: { $sum: 1 } } },
         { $sort: { '_id.date': 1 } }
+      ]),
+      Attendance.find(matchQuery)
+        .populate('studentId', 'firstName lastName admissionNumber rollNumber')
+        .populate('classId', 'className')
+        .populate('sectionId', 'sectionName')
+        .sort({ date: -1 })
+        .limit(1000)
+        .lean(),
+      Student.aggregate([
+        { $match: { branch, admissionStatus: 'confirmed' } },
+        { $group: { _id: '$class', total: { $sum: 1 } } }
       ])
     ]);
 
-    const summaryMap = { present: 0, absent: 0, late: 0, 'half-day': 0 };
+    const summaryMap = { present: 0, absent: 0, late: 0, leave: 0, 'half-day': 0 };
     summary.forEach(s => { summaryMap[s._id] = s.count; });
 
-    res.status(200).json({ summary: summaryMap, daily });
+    // Build class summary (Present vs Total)
+    const classSummaryRaw = await Attendance.aggregate([
+      { $match: { ...matchQuery, status: 'present' } },
+      { $group: { _id: '$classId', present: { $sum: 1 } } }
+    ]);
+
+    // Populate Class Names for the summary
+    const classes = await Class.find({ branch }).select('className').lean();
+    
+    const classSummary = classes.map(c => {
+      const totals = classTotals.find(t => t._id?.toString() === c._id.toString());
+      const attendance = classSummaryRaw.find(a => a._id?.toString() === c._id.toString());
+      return {
+        _id: c._id,
+        className: c.className,
+        totalStudents: totals?.total || 0,
+        presentCount: attendance?.present || 0
+      };
+    });
+
+    // Build timeline data for chart
+    const timelineMap = {};
+    daily.forEach(d => {
+      const dateStr = new Date(d._id.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      if (!timelineMap[dateStr]) {
+        timelineMap[dateStr] = { date: dateStr, present: 0, absent: 0 };
+      }
+      if (d._id.status === 'present') timelineMap[dateStr].present = d.count;
+      if (d._id.status === 'absent') timelineMap[dateStr].absent = d.count;
+    });
+    const timeline = Object.values(timelineMap);
+
+    res.status(200).json({ 
+      summary: summaryMap, 
+      timeline,
+      details,
+      classSummary 
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -181,13 +241,14 @@ exports.getAllAttendance = async (req, res) => {
     const branch = await getBranch(req.userId);
     if (!branch) return res.status(403).json({ message: 'Access denied' });
 
-    const { page = 1, limit = 50, type, classId, sectionId } = req.query;
+    const { page = 1, limit = 50, type, classId, sectionId, status } = req.query;
     const skip = (page - 1) * limit;
 
     const query = { branch };
     if (type) query.type = type;
     if (classId) query.classId = classId;
     if (sectionId) query.sectionId = sectionId;
+    if (status) query.status = status;
 
     const attendance = await Attendance.find(query)
       .populate('studentId', 'firstName lastName')
@@ -210,6 +271,24 @@ exports.getAllAttendance = async (req, res) => {
         totalPages: Math.ceil(total / limit)
       }
     });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+// Delete Attendance Record
+exports.deleteAttendance = async (req, res) => {
+  try {
+    const branch = await getBranch(req.userId);
+    if (!branch) return res.status(403).json({ message: 'Access denied' });
+
+    const { id } = req.params;
+    const result = await Attendance.findOneAndDelete({ _id: id, branch });
+
+    if (!result) {
+      return res.status(404).json({ message: 'Record not found' });
+    }
+
+    res.status(200).json({ message: 'Attendance record deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

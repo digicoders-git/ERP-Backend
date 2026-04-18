@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const transportController = require('../controller/transport/transportOptimizedController');
-const auth = require('../middleware/auth');
+const auth = require('../middleware/flexibleAuth');
 
 router.get('/stats', auth, transportController.getTransportStats);
 router.get('/vehicles', auth, transportController.getVehicles);

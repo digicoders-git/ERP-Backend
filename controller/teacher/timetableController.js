@@ -7,8 +7,8 @@ exports.addTimetable = async (req, res) => {
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
-    if (!admin || admin.role !== 'teacherAdmin') {
-      return res.status(403).json({ message: 'Only teacher admin can add timetable' });
+    if (!admin || !['teacherAdmin', 'admin', 'staff'].includes(admin.role)) {
+      return res.status(403).json({ message: 'Access denied: Insufficient privileges for timetable operations' });
     }
 
     const timetable = new Timetable({
@@ -25,7 +25,7 @@ exports.addTimetable = async (req, res) => {
     });
 
     await timetable.save();
-    res.status(201).json({ message: 'Timetable added successfully', timetable });
+    res.status(201).json({ success: true, message: 'Timetable added successfully', data: timetable });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -37,11 +37,11 @@ exports.getAllTimetables = async (req, res) => {
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
-    if (!admin || admin.role !== 'teacherAdmin') {
-      return res.status(403).json({ message: 'Only teacher admin can view timetables' });
+    if (!admin || !['teacherAdmin', 'admin', 'staff'].includes(admin.role)) {
+      return res.status(403).json({ message: 'Access denied: Insufficient privileges for timetable operations' });
     }
 
-    const query = { branch: admin.branch };
+    const query = { branch: admin.branch, teacherId: adminId };
     if (day) query.day = day;
     if (className) query.className = { $regex: className, $options: 'i' };
 
@@ -51,7 +51,7 @@ exports.getAllTimetables = async (req, res) => {
       .sort({ day: 1, startTime: 1, classTime: 1 })
       .lean();
 
-    res.status(200).json({ timetables });
+    res.status(200).json({ success: true, data: timetables });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -63,8 +63,8 @@ exports.getTimetableByDay = async (req, res) => {
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
-    if (!admin || admin.role !== 'teacherAdmin') {
-      return res.status(403).json({ message: 'Only teacher admin can view timetable' });
+    if (!admin || !['teacherAdmin', 'admin', 'staff'].includes(admin.role)) {
+      return res.status(403).json({ message: 'Access denied: Insufficient privileges for timetable operations' });
     }
 
     const timetables = await Timetable.find({ day, branch: admin.branch })
@@ -73,7 +73,7 @@ exports.getTimetableByDay = async (req, res) => {
       .sort({ startTime: 1, classTime: 1 })
       .lean();
 
-    res.status(200).json({ timetables });
+    res.status(200).json({ success: true, data: timetables });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -86,8 +86,8 @@ exports.updateTimetable = async (req, res) => {
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
-    if (!admin || admin.role !== 'teacherAdmin') {
-      return res.status(403).json({ message: 'Only teacher admin can update timetable' });
+    if (!admin || !['teacherAdmin', 'admin', 'staff'].includes(admin.role)) {
+      return res.status(403).json({ message: 'Access denied: Insufficient privileges for timetable operations' });
     }
 
     const timetable = await Timetable.findById(id);
@@ -111,7 +111,7 @@ exports.updateTimetable = async (req, res) => {
     if (sectionId) timetable.sectionId = sectionId;
 
     await timetable.save();
-    res.status(200).json({ message: 'Timetable updated successfully', timetable });
+    res.status(200).json({ success: true, message: 'Timetable updated successfully', data: timetable });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -123,8 +123,8 @@ exports.deleteTimetable = async (req, res) => {
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
-    if (!admin || admin.role !== 'teacherAdmin') {
-      return res.status(403).json({ message: 'Only teacher admin can delete timetable' });
+    if (!admin || !['teacherAdmin', 'admin', 'staff'].includes(admin.role)) {
+      return res.status(403).json({ message: 'Access denied: Insufficient privileges for timetable operations' });
     }
 
     const timetable = await Timetable.findById(id);
@@ -134,7 +134,7 @@ exports.deleteTimetable = async (req, res) => {
     }
 
     await Timetable.findByIdAndDelete(id);
-    res.status(200).json({ message: 'Timetable deleted successfully' });
+    res.status(200).json({ success: true, message: 'Timetable deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

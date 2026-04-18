@@ -3,6 +3,7 @@ const router = express.Router();
 const ctrl = require('../controller/parentStudentController');
 const psAuth = require('../middleware/parentStudentAuth');
 const auth = require('../middleware/auth');
+const flexibleAuth = require('../middleware/flexibleAuth');
 
 // Public
 router.post('/login', ctrl.login);
@@ -14,6 +15,9 @@ router.get('/fee', psAuth, ctrl.getFee);
 router.get('/assignments', psAuth, ctrl.getAssignments);
 router.get('/notices', psAuth, ctrl.getNotices);
 router.get('/library', psAuth, ctrl.getLibrary);
+router.get('/library/browse', psAuth, ctrl.getBrowseBooks);
+router.post('/library/request', psAuth, ctrl.requestBook);
+router.get('/library/requests', psAuth, ctrl.getBookRequests);
 router.get('/hostel', psAuth, ctrl.getHostel);
 router.get('/live-classes', psAuth, ctrl.getLiveClasses);
 router.get('/recorded-classes', psAuth, ctrl.getRecordedClasses);
@@ -25,6 +29,7 @@ router.get('/attendance-history', psAuth, ctrl.getAttendanceHistory);
 router.get('/exam-results', psAuth, ctrl.getExamResults);
 router.get('/transport-info', psAuth, ctrl.getTransportInfo);
 router.get('/profile', psAuth, ctrl.getStudentProfile);
+router.put('/profile', psAuth, ctrl.updateProfile);
 router.post('/message/send', psAuth, ctrl.sendMessageToTeacher);
 router.get('/messages', psAuth, ctrl.getMessages);
 router.post('/payment/initiate', psAuth, ctrl.initiateFeePayment);
@@ -39,5 +44,11 @@ router.post('/warden/services', psAuth, ctrl.recordWardenService);
 // Admin — create/manage users
 router.post('/admin/create-user', auth, ctrl.createUser);
 router.get('/admin/users', auth, ctrl.getAllUsers);
+
+// Staff — manage parent credentials for students
+router.post('/', flexibleAuth, ctrl.createParentCredentials);
+router.get('/student/:studentId', flexibleAuth, ctrl.getParentCredentialsByStudent);
+router.put('/:id', flexibleAuth, ctrl.updateParentCredentials);
+router.delete('/:id', flexibleAuth, ctrl.deleteParentCredentials);
 
 module.exports = router;

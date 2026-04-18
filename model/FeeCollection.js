@@ -38,7 +38,7 @@ const feeCollectionSchema = new mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['cash', 'online', 'cheque', 'card'],
+    enum: ['Cash', 'Online', 'Cheque', 'Bank Transfer', 'Common Service Point', 'cash', 'online', 'cheque'],
     required: true
   },
   transactionId: {

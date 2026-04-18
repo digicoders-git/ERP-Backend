@@ -4,7 +4,7 @@ const Admin = require('../model/Admin');
 // Create Class
 exports.createClass = async (req, res) => {
   try {
-    const { className, classCode, classCapacity, description } = req.body;
+    const { className, classCode, classCapacity, description, stream, classTeacher } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -12,19 +12,32 @@ exports.createClass = async (req, res) => {
       return res.status(403).json({ message: 'Only branch admin can create classes' });
     }
 
+    // Validate classTeacher if provided
+    if (classTeacher) {
+      const Teacher = require('../model/Teacher');
+      const teacherExists = await Teacher.findById(classTeacher);
+      if (!teacherExists) {
+        return res.status(400).json({ message: 'Class teacher does not exist in database' });
+      }
+    }
+
     const existingClass = await Class.findOne({ classCode: classCode.toUpperCase() });
     if (existingClass) {
       return res.status(400).json({ message: 'Class code already exists' });
     }
+
+    const streamArray = Array.isArray(stream) ? stream : stream ? [stream] : [];
 
     const newClass = new Class({
       className,
       classCode: classCode.toUpperCase(),
       classCapacity,
       description,
+      stream: streamArray.length > 0 ? streamArray : null,
       branch: admin.branch,
       client: admin.client,
-      createdBy: adminId
+      createdBy: adminId,
+      classTeacher: classTeacher || null
     });
 
     await newClass.save();
@@ -59,6 +72,7 @@ exports.getAllClasses = async (req, res) => {
       classes = await Class.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
+        .populate('classTeacher', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit));
@@ -68,6 +82,7 @@ exports.getAllClasses = async (req, res) => {
       classes = await Class.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
+        .populate('classTeacher', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit));
@@ -77,6 +92,7 @@ exports.getAllClasses = async (req, res) => {
         .populate('branch', 'branchName branchCode')
         .populate('client', 'name')
         .populate('createdBy', 'email role')
+        .populate('classTeacher', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit));
@@ -111,7 +127,8 @@ exports.getClassById = async (req, res) => {
     const classData = await Class.findById(id)
       .populate('branch', 'branchName branchCode')
       .populate('client', 'name')
-      .populate('createdBy', 'email role');
+      .populate('createdBy', 'email role')
+      .populate('classTeacher', 'name email');
 
     if (!classData) {
       return res.status(404).json({ message: 'Class not found' });
@@ -135,7 +152,7 @@ exports.getClassById = async (req, res) => {
 exports.updateClass = async (req, res) => {
   try {
     const { id } = req.params;
-    const { className, classCode, classCapacity, description } = req.body;
+    const { className, classCode, classCapacity, description, stream, classTeacher } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -159,10 +176,25 @@ exports.updateClass = async (req, res) => {
       }
     }
 
+    if (classTeacher) {
+      const Teacher = require('../model/Teacher');
+      const teacherExists = await Teacher.findById(classTeacher);
+      if (!teacherExists) {
+        return res.status(400).json({ message: 'Class teacher does not exist in database' });
+      }
+      classData.classTeacher = classTeacher;
+    } else if (classTeacher === null || classTeacher === '') {
+      classData.classTeacher = null;
+    }
+
     if (className) classData.className = className;
     if (classCode) classData.classCode = classCode.toUpperCase();
     if (classCapacity) classData.classCapacity = classCapacity;
     if (description !== undefined) classData.description = description;
+    if (stream !== undefined) {
+      const streamArray = Array.isArray(stream) ? stream : stream ? [stream] : [];
+      classData.stream = streamArray.length > 0 ? streamArray : null;
+    }
 
     await classData.save();
     res.status(200).json({ message: 'Class updated successfully', class: classData });

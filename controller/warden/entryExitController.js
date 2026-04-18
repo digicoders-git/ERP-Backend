@@ -8,8 +8,38 @@ exports.getAll = async (req, res) => {
     if (date) filter.date = date;
     if (action) filter.action = action;
     if (studentId) filter.studentId = studentId;
+
+    const HostelStudent = require('../../model/HostelStudent');
+    const Student = require('../../model/Student');
+    const BedAllocation = require('../../model/BedAllocation');
+
     const records = await EntryExit.find(filter).sort({ timestamp: -1 }).lean();
-    return successResponse(res, records, 'Records fetched');
+
+    // Self-healing: Populate latest student info for each record
+    const enrichedRecords = await Promise.all(records.map(async (item) => {
+      // 1. Try Hostel Database
+      let student = await HostelStudent.findById(item.studentId).lean();
+      
+      // 2. Try Main School Database (Legacy)
+      if (!student) {
+        student = await Student.findById(item.studentId).lean();
+      }
+
+      // 3. Fetch current room
+      const allotment = await BedAllocation.findOne({ studentId: item.studentId }).lean();
+
+      const currentName = student ? (student.name || `${student.firstName} ${student.lastName}`) : item.studentName;
+      const rollNumber = student ? (student.rollNumber || student.rollNo || 'N/A') : 'N/A';
+
+      return {
+        ...item,
+        studentName: currentName,
+        rollNumber: rollNumber,
+        room: allotment ? allotment.roomNumber : (item.room || 'N/A')
+      };
+    }));
+
+    return successResponse(res, enrichedRecords, 'Records fetched with fresh data');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }

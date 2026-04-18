@@ -3,6 +3,12 @@ const router = express.Router();
 const attendanceController = require('../../controller/teacher/attendanceController');
 const auth = require('../../middleware/auth');
 
+// Get students by class and section
+router.get('/students', auth, attendanceController.getStudentsByClass);
+
+// Get teacher's own attendance
+router.get('/teacher', auth, attendanceController.getTeacherAttendance);
+
 // Mark attendance
 router.post('/mark', auth, attendanceController.markAttendance);
 

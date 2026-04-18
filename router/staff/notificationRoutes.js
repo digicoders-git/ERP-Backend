@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../../controller/staff/notificationController');
-const auth = require('../../middleware/auth');
+const staffAuth = require('../../middleware/staffAuth');
 
-router.get('/all', auth, ctrl.getAll);
-router.post('/send', auth, ctrl.send);
-router.delete('/:id', auth, ctrl.remove);
-router.get('/settings', auth, ctrl.getSettings);
-router.put('/settings', auth, ctrl.saveSettings);
+router.get('/all', staffAuth, ctrl.getAll);
+router.post('/send', staffAuth, ctrl.send);
+router.delete('/:id', staffAuth, ctrl.remove);
+router.get('/settings', staffAuth, ctrl.getSettings);
+router.put('/settings', staffAuth, ctrl.saveSettings);
+router.get('/recipients', staffAuth, ctrl.getRecipients);
 
 module.exports = router;

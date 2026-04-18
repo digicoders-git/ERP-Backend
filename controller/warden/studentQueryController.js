@@ -7,8 +7,38 @@ exports.getAll = async (req, res) => {
     const filter = {};
     if (status && status !== 'All') filter.status = status;
     if (category && category !== 'All') filter.category = category;
+
+    const HostelStudent = require('../../model/HostelStudent');
+    const Student = require('../../model/Student');
+    const BedAllocation = require('../../model/BedAllocation');
+
     const queries = await StudentQuery.find(filter).sort({ createdAt: -1 }).lean();
-    return successResponse(res, queries, 'Queries fetched');
+
+    // Self-healing: Populate latest student info for each record
+    const enrichedQueries = await Promise.all(queries.map(async (item) => {
+      // 1. Try Hostel Database
+      let student = await HostelStudent.findById(item.studentId).lean();
+      
+      // 2. Try Main School Database (Legacy)
+      if (!student) {
+        student = await Student.findById(item.studentId).lean();
+      }
+
+      // 3. Fetch current room
+      const allotment = await BedAllocation.findOne({ studentId: item.studentId }).lean();
+
+      const studentName = student ? (student.name || `${student.firstName} ${student.lastName}`) : (item.studentName || 'N/A');
+      const rollNumber = student ? (student.rollNumber || student.rollNo || 'N/A') : 'N/A';
+
+      return {
+        ...item,
+        studentName: studentName,
+        rollNumber: rollNumber,
+        roomNumber: allotment ? allotment.roomNumber : (item.roomNumber || 'N/A')
+      };
+    }));
+
+    return successResponse(res, enrichedQueries, 'Queries fetched with fresh data');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }

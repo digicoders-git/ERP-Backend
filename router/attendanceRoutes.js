@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const attendanceController = require('../controller/attendanceController');
-const auth = require('../middleware/auth');
+const flexibleAuth = require('../middleware/flexibleAuth');
 
-router.post('/mark', auth, attendanceController.markAttendance);
-router.get('/all', auth, attendanceController.getAllAttendance);
-router.get('/by-date', auth, attendanceController.getAttendanceByDate);
-router.get('/report', auth, attendanceController.getAttendanceReport);
-router.get('/students', auth, attendanceController.getStudentsForAttendance);
-router.get('/staff-list', auth, attendanceController.getStaffForAttendance);
+router.post('/mark', flexibleAuth, attendanceController.markAttendance);
+router.get('/all', flexibleAuth, attendanceController.getAllAttendance);
+router.get('/by-date', flexibleAuth, attendanceController.getAttendanceByDate);
+router.get('/report', flexibleAuth, attendanceController.getAttendanceReport);
+router.get('/students', flexibleAuth, attendanceController.getStudentsForAttendance);
+router.get('/staff-list', flexibleAuth, attendanceController.getStaffForAttendance);
+router.delete('/:id', flexibleAuth, attendanceController.deleteAttendance);
 
 module.exports = router;

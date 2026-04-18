@@ -1,15 +1,21 @@
 const Teacher = require('../../model/Teacher');
+const Admin = require('../../model/Admin');
 const Assignment = require('../../model/Assignment');
 const Attendance = require('../../model/Attendance');
 const Timetable = require('../../model/Timetable');
+const mongoose = require('mongoose');
 
 exports.getAllTeachers = async (req, res) => {
   try {
     const { branch, page = 1, limit = 20, search = '', status = 'all' } = req.query;
     const skip = (page - 1) * limit;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
-    const query = { branch: adminBranch || branch };
+    const query = {};
+    if (adminBranch) query.branch = adminBranch;
+    else if (branch) query.branch = new mongoose.Types.ObjectId(branch);
+    else if (adminClient) query.client = adminClient;
     if (status !== 'all') query.status = status === 'active';
     if (search) {
       query.$or = [
@@ -46,10 +52,17 @@ exports.getAllTeachers = async (req, res) => {
 
 exports.getTeacherStats = async (req, res) => {
   try {
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+
+    const matchQuery = adminBranch
+      ? { branch: adminBranch }
+      : adminClient
+      ? { client: adminClient }
+      : {};
 
     const stats = await Teacher.aggregate([
-      { $match: { branch: adminBranch } },
+      { $match: matchQuery },
       {
         $facet: {
           total: [{ $count: 'count' }],
@@ -120,16 +133,22 @@ exports.getTeacherWithClasses = async (req, res) => {
 
 exports.createTeacher = async (req, res) => {
   try {
-    const { name, email, mobile, subjects, qualification, experience, salary, address } = req.body;
+    const { name, email, mobile, subjects, qualification, experience, salary, address, assignedClass, assignedSection } = req.body;
     const adminBranch = req.user.branch;
 
     if (!name || !email || !mobile) {
       return res.status(400).json({ success: false, message: 'Required fields missing' });
     }
 
+    // Check if email already exists in Admin
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(400).json({ success: false, message: 'Email already exists in Admin' });
+    }
+
     const existingTeacher = await Teacher.findOne({ email });
     if (existingTeacher) {
-      return res.status(400).json({ success: false, message: 'Email already exists' });
+      return res.status(400).json({ success: false, message: 'Email already exists in Teacher' });
     }
 
     const teacher = new Teacher({
@@ -144,10 +163,16 @@ exports.createTeacher = async (req, res) => {
       branch: adminBranch,
       client: req.user.client,
       createdBy: req.userId,
-      status: true
+      status: true,
+      assignedClass: assignedClass || null,
+      assignedSection: assignedSection || null
     });
 
     await teacher.save();
+
+    // Populate assigned class and section for response
+    await teacher.populate('assignedClass', 'className');
+    await teacher.populate('assignedSection', 'sectionName');
 
     res.status(201).json({
       success: true,
@@ -162,13 +187,18 @@ exports.createTeacher = async (req, res) => {
 exports.updateTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
-    const { name, email, mobile, subjects, qualification, experience, salary, address, status } = req.body;
+    const { name, email, mobile, subjects, qualification, experience, salary, address, status, assignedClass, assignedSection } = req.body;
+
+    const updateData = { name, email, mobile, subjects, qualification, experience, salary, address, status };
+    
+    if (assignedClass !== undefined) updateData.assignedClass = assignedClass || null;
+    if (assignedSection !== undefined) updateData.assignedSection = assignedSection || null;
 
     const teacher = await Teacher.findByIdAndUpdate(
       teacherId,
-      { name, email, mobile, subjects, qualification, experience, salary, address, status },
+      updateData,
       { new: true, runValidators: true }
-    );
+    ).populate('assignedClass', 'className').populate('assignedSection', 'sectionName');
 
     if (!teacher) {
       return res.status(404).json({ success: false, message: 'Teacher not found' });

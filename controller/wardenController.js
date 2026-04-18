@@ -8,7 +8,7 @@ const path = require('path');
 // Create Warden
 exports.createWarden = async (req, res) => {
   try {
-    const { wardenName, email, password, gender, shift, assignedHostel } = req.body;
+    const { wardenName, mobileNumber, email, password, gender, shift, assignedHostel } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -18,7 +18,13 @@ exports.createWarden = async (req, res) => {
 
     const existingWarden = await Warden.findOne({ email });
     if (existingWarden) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ message: 'Email already exists in Warden' });
+    }
+
+    // Check if email already exists in Admin
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(400).json({ message: 'Email already exists in Admin' });
     }
 
     const hostel = await Hostel.findById(assignedHostel);
@@ -35,6 +41,7 @@ exports.createWarden = async (req, res) => {
     const newWarden = new Warden({
       profileImage: req.file ? req.file.path : undefined,
       wardenName,
+      mobileNumber,
       email,
       password: hashedPassword,
       gender,
@@ -170,7 +177,7 @@ exports.getWardenById = async (req, res) => {
 exports.updateWarden = async (req, res) => {
   try {
     const { id } = req.params;
-    const { wardenName, gender, shift, assignedHostel } = req.body;
+    const { wardenName, mobileNumber, gender, shift, assignedHostel } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -209,6 +216,7 @@ exports.updateWarden = async (req, res) => {
     }
 
     if (wardenName) warden.wardenName = wardenName;
+    if (mobileNumber) warden.mobileNumber = mobileNumber;
     if (gender) warden.gender = gender;
     if (shift) warden.shift = shift;
 

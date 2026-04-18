@@ -69,18 +69,20 @@ exports.updateApprovalStatus = async (req, res) => {
     if (!branchId) return res.status(403).json({ message: 'Access denied' });
 
     const { status } = req.body;
-    if (!['Approved', 'Rejected', 'Pending'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status. Must be Approved, Rejected, or Pending' });
+    if (!['approved', 'rejected', 'pending', 'Approved', 'Rejected', 'Pending'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be approved, rejected, or pending' });
     }
+
+    const normalizedStatus = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 
     const approval = await Approval.findOneAndUpdate(
       { _id: req.params.id, branch: branchId },
-      { status },
+      { status: normalizedStatus },
       { new: true }
     );
     if (!approval) return res.status(404).json({ message: 'Approval not found' });
 
-    res.status(200).json({ message: `Approval ${status.toLowerCase()} successfully`, approval });
+    res.status(200).json({ message: `Approval ${normalizedStatus.toLowerCase()} successfully`, approval });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

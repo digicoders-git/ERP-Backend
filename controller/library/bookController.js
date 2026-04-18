@@ -34,7 +34,7 @@ exports.addBook = async (req, res) => {
     });
 
     await book.save();
-    res.status(201).json({ message: 'Book added successfully', book });
+    res.status(201).json({ success: true, message: 'Book added successfully', data: book });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -72,7 +72,8 @@ exports.getAllBooks = async (req, res) => {
     ]);
 
     res.status(200).json({
-      books,
+      success: true,
+      data: books,
       pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / limit) }
     });
   } catch (error) {
@@ -132,7 +133,7 @@ exports.updateBook = async (req, res) => {
     }
 
     await book.save();
-    res.status(200).json({ message: 'Book updated successfully', book });
+    res.status(200).json({ success: true, message: 'Book updated successfully', data: book });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -149,7 +150,7 @@ exports.deleteBook = async (req, res) => {
     if (book.branch.toString() !== admin.branch.toString()) return res.status(403).json({ message: 'Access denied' });
 
     await Book.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Book deleted successfully' });
+    res.status(200).json({ success: true, message: 'Book deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

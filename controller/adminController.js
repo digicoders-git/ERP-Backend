@@ -28,11 +28,23 @@ exports.createSuperAdmin = async (req, res) => {
 // Login Admin
 exports.loginAdmin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, panel } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
+
+    // Panel → allowed roles mapping
+    const PANEL_ROLES = {
+      superAdmin:   ['superAdmin'],
+      schoolAdmin:  ['clientAdmin'],
+      branchAdmin:  ['branchAdmin'],
+      staffAdmin:   ['staffAdmin'],
+      teacherAdmin: ['teacherAdmin'],
+      feeAdmin:     ['feeAdmin', 'feeManager'],
+      wardenAdmin:  ['wardenAdmin'],
+      libraryAdmin: ['libraryAdmin'],
+    };
 
     const admin = await Admin.findOne({ email }).populate('client', 'name').populate('branch', 'branchName branchCode');
     if (!admin) {
@@ -48,14 +60,30 @@ exports.loginAdmin = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ _id: admin._id, role: admin.role, email: admin.email, branch: admin.branch?._id, client: admin.client?._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    // If panel is specified, validate role matches
+    if (panel && PANEL_ROLES[panel]) {
+      if (!PANEL_ROLES[panel].includes(admin.role)) {
+        return res.status(403).json({ message: 'Access denied. Invalid credentials for this panel.' });
+      }
+    }
 
-    res.status(200).json({ 
-      message: 'Login successful', 
+    const token = jwt.sign(
+      { _id: admin._id, role: admin.role, email: admin.email, branch: admin.branch?._id, client: admin.client?._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
       token,
       admin: {
         id: admin._id,
         email: admin.email,
+        name: admin.name,
+        mobile: admin.mobile,
+        address: admin.address,
+        profileImage: admin.profileImage,
         role: admin.role,
         allowedPanels: admin.allowedPanels,
         client: admin.client,

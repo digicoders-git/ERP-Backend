@@ -4,10 +4,17 @@ const RoomType = require('../../model/RoomType');
 const HostelAllocation = require('../../model/HostelAllocation');
 const Warden = require('../../model/Warden');
 const Admin = require('../../model/Admin');
+const Staff = require('../../model/Staff');
 
 const getBranchClient = async (userId) => {
-  const admin = await Admin.findById(userId).select('branch client').lean();
-  return admin || null;
+  let user = await Admin.findById(userId).select('branch client').lean();
+  if (!user) {
+    user = await Staff.findById(userId).select('branch client').lean();
+  }
+  if (!user) {
+    throw new Error('User not found or unauthorized');
+  }
+  return user;
 };
 
 // ─── HOSTEL ───────────────────────────────────────────────
@@ -211,6 +218,37 @@ exports.getAllWardens = async (req, res) => {
       .select('-password')
       .sort({ wardenName: 1 }).lean();
     res.status(200).json({ wardens });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.createWarden = async (req, res) => {
+  try {
+    const { branch, client } = await getBranchClient(req.userId);
+    const warden = await Warden.create({ ...req.body, branch, client, createdBy: req.userId });
+    res.status(201).json({ message: 'Warden created successfully', warden });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.updateWarden = async (req, res) => {
+  try {
+    const { branch } = await getBranchClient(req.userId);
+    const warden = await Warden.findOneAndUpdate({ _id: req.params.id, branch }, req.body, { new: true }).lean();
+    if (!warden) return res.status(404).json({ message: 'Warden not found' });
+    res.status(200).json({ message: 'Warden updated successfully', warden });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.deleteWarden = async (req, res) => {
+  try {
+    const { branch } = await getBranchClient(req.userId);
+    await Warden.findOneAndDelete({ _id: req.params.id, branch });
+    res.status(200).json({ message: 'Warden deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

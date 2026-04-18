@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const digitalLibrarySchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   subject: { type: String, required: true, trim: true },
-  class: { type: String, required: true, trim: true },
+  class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true },
+  stream: { type: String, default: null },
   fileUrl: { type: String, required: true },
   fileName: { type: String, required: true },
   fileSize: { type: String },

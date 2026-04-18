@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const teacherSchema = new mongoose.Schema({
+  customId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true
+  },
   name: {
     type: String,
     required: true,
@@ -10,7 +16,9 @@ const teacherSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    trim: true
+    sparse: true,
+    trim: true,
+    lowercase: true
   },
   mobile: {
     type: String,
@@ -59,12 +67,23 @@ const teacherSchema = new mongoose.Schema({
   status: {
     type: Boolean,
     default: true
+  },
+  assignedClass: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class',
+    default: null
+  },
+  assignedSection: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Section',
+    default: null
   }
 }, { timestamps: true });
 
 teacherSchema.index({ branch: 1, status: 1 });
 teacherSchema.index({ client: 1, status: 1 });
-teacherSchema.index({ email: 1 });
+teacherSchema.index({ email: 1 }, { unique: true, sparse: true });
+teacherSchema.index({ customId: 1 }, { unique: true, sparse: true });
 teacherSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Teacher', teacherSchema);

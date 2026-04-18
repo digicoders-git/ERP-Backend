@@ -1,7 +1,19 @@
 const ExamSchedule = require('../../model/ExamSchedule');
 const Student = require('../../model/Student');
 const Admin = require('../../model/Admin');
+const Staff = require('../../model/Staff');
 const mongoose = require('mongoose');
+
+const getBranchClient = async (userId) => {
+  let user = await Admin.findById(userId).select('branch client').lean();
+  if (!user) {
+    user = await Staff.findById(userId).select('branch client').lean();
+  }
+  if (!user) {
+    throw new Error('User not found or unauthorized');
+  }
+  return user;
+};
 
 // Marks Schema (embedded in ExamSchedule or separate collection)
 const marksSchema = new mongoose.Schema({
@@ -23,20 +35,20 @@ const Marks = mongoose.models.Marks || mongoose.model('Marks', marksSchema);
 exports.addMarks = async (req, res) => {
   try {
     const { examScheduleId, studentId, subject, marksObtained, totalMarks, remarks } = req.body;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
     const student = await Student.findById(studentId).lean();
-    if (!student || student.branch.toString() !== admin.branch.toString()) {
+    if (!student || student.branch.toString() !== branch.toString()) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
     const percentage = (marksObtained / totalMarks) * 100;
     const grade = calculateGrade(percentage);
 
-    const existingMarks = await Marks.findOne({ 
-      examSchedule: examScheduleId, 
-      student: studentId, 
-      subject 
+    const existingMarks = await Marks.findOne({
+      examSchedule: examScheduleId,
+      student: studentId,
+      subject
     });
 
     if (existingMarks) {
@@ -56,7 +68,7 @@ exports.addMarks = async (req, res) => {
       totalMarks,
       grade,
       remarks,
-      branch: admin.branch,
+      branch,
       enteredBy: req.userId
     });
 
@@ -72,27 +84,26 @@ exports.addMarks = async (req, res) => {
 exports.getMarksByExam = async (req, res) => {
   try {
     const { examScheduleId, classId, section } = req.query;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
-    const query = { branch: admin.branch };
-    if (classId) query.class = classId;
-    if (section) query.section = section;
-    query.status = 'active';
+    const query = { branch, status: 'active' };
+
+    if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+      query.class = new mongoose.Types.ObjectId(classId);
+    }
+    if (section && section !== 'undefined' && section !== 'null' && mongoose.Types.ObjectId.isValid(section)) {
+      query.section = new mongoose.Types.ObjectId(section);
+    }
 
     const [students, marks] = await Promise.all([
       Student.find(query)
-        .select('name admissionNumber rollNumber')
+        .select('firstName lastName admissionNumber rollNumber')
         .sort({ rollNumber: 1 })
         .lean(),
-      Marks.find({ examSchedule: examScheduleId, branch: admin.branch })
-        .lean()
+      examScheduleId
+        ? Marks.find({ examSchedule: examScheduleId, branch }).lean()
+        : []
     ]);
-
-    const marksMap = {};
-    marks.forEach(m => {
-      const key = `${m.student}_${m.subject}`;
-      marksMap[key] = m;
-    });
 
     const result = students.map(student => ({
       ...student,
@@ -109,14 +120,14 @@ exports.getMarksByExam = async (req, res) => {
 exports.getStudentMarksReport = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
     const student = await Student.findById(studentId)
       .populate('class', 'className')
       .populate('section', 'sectionName')
       .lean();
 
-    if (!student || student.branch.toString() !== admin.branch.toString()) {
+    if (!student || student.branch.toString() !== branch.toString()) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
@@ -169,10 +180,10 @@ const GradingSystem = mongoose.models.GradingSystem || mongoose.model('GradingSy
 exports.createGrading = async (req, res) => {
   try {
     const { gradeName, minPercentage, maxPercentage, gradePoint, description } = req.body;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
     const grading = new GradingSystem({
-      branch: admin.branch,
+      branch,
       gradeName,
       minPercentage,
       maxPercentage,
@@ -191,9 +202,9 @@ exports.createGrading = async (req, res) => {
 // Get Grading System
 exports.getGradingSystem = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
-    const grading = await GradingSystem.find({ branch: admin.branch })
+    const grading = await GradingSystem.find({ branch })
       .sort({ minPercentage: -1 })
       .lean();
 
@@ -208,9 +219,9 @@ exports.updateGrading = async (req, res) => {
   try {
     const { id } = req.params;
     const { gradeName, minPercentage, maxPercentage, gradePoint, description } = req.body;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
-    const grading = await GradingSystem.findOne({ _id: id, branch: admin.branch });
+    const grading = await GradingSystem.findOne({ _id: id, branch });
     if (!grading) {
       return res.status(404).json({ message: 'Grading not found' });
     }
@@ -233,9 +244,9 @@ exports.updateGrading = async (req, res) => {
 exports.deleteGrading = async (req, res) => {
   try {
     const { id } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
-    await GradingSystem.findOneAndDelete({ _id: id, branch: admin.branch });
+    await GradingSystem.findOneAndDelete({ _id: id, branch });
 
     res.status(200).json({ message: 'Grading deleted successfully' });
   } catch (error) {
@@ -272,22 +283,32 @@ const OnlineExam = mongoose.models.OnlineExam || mongoose.model('OnlineExam', on
 // Create Online Exam
 exports.createOnlineExam = async (req, res) => {
   try {
-    const { title, description, class: classId, section, subject, duration, totalMarks, passingMarks, startDate, endDate, questions } = req.body;
-    const admin = await Admin.findById(req.userId).lean();
+    const { title, description, class: classId, section, subject, duration, totalMarks, passingMarks, startDate, endDate, questions, status } = req.body;
+    const { branch } = await getBranchClient(req.userId);
+
+    // Validation
+    if (!title || !classId || !subject || !duration || !totalMarks || !passingMarks || !startDate || !endDate) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    if (!questions || questions.length === 0) {
+      return res.status(400).json({ message: 'At least one question is required' });
+    }
 
     const exam = new OnlineExam({
-      branch: admin.branch,
+      branch,
       title,
       description,
       class: classId,
-      section,
+      section: section || null,
       subject,
-      duration,
-      totalMarks,
-      passingMarks,
-      startDate,
-      endDate,
+      duration: Number(duration),
+      totalMarks: Number(totalMarks),
+      passingMarks: Number(passingMarks),
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
       questions,
+      status: status || 'draft',
       createdBy: req.userId
     });
 
@@ -295,6 +316,7 @@ exports.createOnlineExam = async (req, res) => {
 
     res.status(201).json({ message: 'Online exam created successfully', exam });
   } catch (error) {
+    console.error('Create online exam error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -303,10 +325,10 @@ exports.createOnlineExam = async (req, res) => {
 exports.getAllOnlineExams = async (req, res) => {
   try {
     const { page = 1, limit = 20, status } = req.query;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
     const skip = (page - 1) * limit;
 
-    const query = { branch: admin.branch };
+    const query = { branch };
     if (status) query.status = status;
 
     const [exams, total] = await Promise.all([
@@ -338,9 +360,9 @@ exports.getAllOnlineExams = async (req, res) => {
 exports.getOnlineExamById = async (req, res) => {
   try {
     const { id } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
-    const exam = await OnlineExam.findOne({ _id: id, branch: admin.branch })
+    const exam = await OnlineExam.findOne({ _id: id, branch })
       .populate('class', 'className')
       .populate('section', 'sectionName')
       .lean();
@@ -360,10 +382,10 @@ exports.updateOnlineExam = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
     const exam = await OnlineExam.findOneAndUpdate(
-      { _id: id, branch: admin.branch },
+      { _id: id, branch },
       updates,
       { new: true }
     );
@@ -382,11 +404,46 @@ exports.updateOnlineExam = async (req, res) => {
 exports.deleteOnlineExam = async (req, res) => {
   try {
     const { id } = req.params;
-    const admin = await Admin.findById(req.userId).lean();
+    const { branch } = await getBranchClient(req.userId);
 
-    await OnlineExam.findOneAndDelete({ _id: id, branch: admin.branch });
+    await OnlineExam.findOneAndDelete({ _id: id, branch });
 
     res.status(200).json({ message: 'Exam deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get all marks history
+exports.getAllMarksHistory = async (req, res) => {
+  try {
+    const { branch } = await getBranchClient(req.userId);
+    const { limit = 1000, classId, examScheduleId } = req.query;
+
+    const query = { branch };
+    if (examScheduleId) query.examSchedule = examScheduleId;
+
+    const marks = await Marks.find(query)
+      .populate({
+        path: 'student',
+        select: 'firstName lastName rollNumber admissionNumber class',
+        populate: { path: 'class', select: 'className' }
+      })
+      .populate('examSchedule', 'examName examType date subject totalMarks passingMarks')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    // Filter by class if provided
+    let filteredMarks = marks;
+    if (classId) {
+      filteredMarks = marks.filter(m => 
+        m.student?.class?._id?.toString() === classId || 
+        m.student?.class?.toString() === classId
+      );
+    }
+
+    res.status(200).json({ marks: filteredMarks });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

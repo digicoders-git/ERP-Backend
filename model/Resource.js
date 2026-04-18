@@ -19,6 +19,22 @@ const resourceSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  fileType: {
+    type: String,
+    default: 'PDF'
+  },
+  class: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class'
+  },
+  section: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Section'
+  },
+  downloads: {
+    type: Number,
+    default: 0
+  },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Branch',

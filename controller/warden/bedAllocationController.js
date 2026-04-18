@@ -7,9 +7,38 @@ exports.getAll = async (req, res) => {
     const filter = {};
     if (roomId) filter.roomId = roomId;
     if (status) filter.status = status;
-    else filter.status = 'active'; // default only active
-    const allocations = await BedAllocation.find(filter).sort({ createdAt: -1 }).lean();
-    return successResponse(res, allocations, 'Bed allocations fetched');
+    else filter.status = 'active'; 
+
+    const Room = require('../../model/Room');
+    const HostelStudent = require('../../model/HostelStudent');
+    const Student = require('../../model/Student');
+
+    let allocations = await BedAllocation.find(filter).sort({ createdAt: -1 }).lean();
+
+    // Self-healing: Fetch latest student and room info for each allocation
+    const enrichedAllocations = await Promise.all(allocations.map(async (allot) => {
+      // 1. Try to fetch from HostelStudent first
+      let student = await HostelStudent.findById(allot.studentId).lean();
+      
+      // 2. Fallback to Main School Student collection (Legacy)
+      if (!student) {
+        student = await Student.findById(allot.studentId).lean();
+      }
+
+      // 3. Update Name and Roll from the freshest record available
+      const currentName = student ? (student.name || `${student.firstName} ${student.lastName}`) : allot.studentName;
+      const rollNumber = student ? (student.rollNumber || student.rollNo || 'N/A') : 'N/A';
+
+      return {
+        ...allot,
+        studentName: currentName,
+        rollNumber: rollNumber,
+        // Ensure room parity
+        roomNo: allot.roomNumber
+      };
+    }));
+
+    return successResponse(res, enrichedAllocations, 'Bed allocations fetched with fresh data');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }
@@ -22,11 +51,11 @@ exports.allocate = async (req, res) => {
 
     // Fetch room and student by ID
     const Room = require('../../model/Room');
-    const Student = require('../../model/Student');
+    const HostelStudent = require('../../model/HostelStudent');
 
     const [room, student] = await Promise.all([
       Room.findById(roomId).lean(),
-      Student.findById(studentId).lean()
+      HostelStudent.findById(studentId).lean()
     ]);
 
     if (!room) return errorResponse(res, 'Room not found', 404);
@@ -45,7 +74,7 @@ exports.allocate = async (req, res) => {
       bedNumber,
       studentId,
       roomNumber: room.roomNo,
-      studentName: `${student.firstName} ${student.lastName}`,
+      studentName: student.name,
       allocatedDate: req.body.allocatedDate || new Date().toISOString().split('T')[0]
     });
     await allocation.save();

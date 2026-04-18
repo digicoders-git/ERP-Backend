@@ -53,7 +53,10 @@ router.get('/book-count', async (req, res) => {
   try {
     const count = await Book.countDocuments();
     const data = await Book.find().limit(5).lean();
-    res.json({ success: true, count, data });
+    // Also show all unique clients and branches
+    const clients = [...new Set(data.map(b => b.client?.toString()))];
+    const branches = [...new Set(data.map(b => b.branch?.toString()))];
+    res.json({ success: true, count, data, uniqueClients: clients, uniqueBranches: branches });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

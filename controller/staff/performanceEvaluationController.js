@@ -1,9 +1,39 @@
 const PerformanceEvaluation = require('../../model/PerformanceEvaluation');
+const Teacher = require('../../model/Teacher');
+const Admin = require('../../model/Admin');
 const { successResponse, errorResponse } = require('../../responseFormatter');
+
+exports.getMyEvaluations = async (req, res) => {
+  try {
+    const adminId = req.userId;
+    const admin = await Admin.findById(adminId).select('teacher').lean();
+    
+    if (!admin || !admin.teacher) {
+      return errorResponse(res, 'Teacher not found', 404);
+    }
+
+    const teacher = await Teacher.findById(admin.teacher).select('name').lean();
+    if (!teacher) {
+      return errorResponse(res, 'Teacher not found', 404);
+    }
+
+    const evaluations = await PerformanceEvaluation.find({ teacher: admin.teacher })
+      .populate('teacher', 'name profileImage email')
+      .sort({ evaluationDate: -1 })
+      .lean();
+
+    return successResponse(res, evaluations, 'Evaluations fetched successfully');
+  } catch (error) {
+    console.error('Get my evaluations error:', error);
+    return errorResponse(res, 'Server error', 500, error);
+  }
+};
 
 exports.getAllEvaluations = async (req, res) => {
   try {
-    const evaluations = await PerformanceEvaluation.find().sort({ createdAt: -1 });
+    const evaluations = await PerformanceEvaluation.find()
+      .populate('teacher', 'name profileImage email')
+      .sort({ createdAt: -1 });
     return successResponse(res, evaluations, 'Evaluations fetched successfully');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
@@ -24,7 +54,7 @@ exports.getEvaluationById = async (req, res) => {
 
 exports.createEvaluation = async (req, res) => {
   try {
-    const { teacherName, evaluationPeriod, teachingQuality, studentEngagement, punctuality, professionalism, feedback, evaluatedBy } = req.body;
+    const { teacher, teacherName, evaluationPeriod, teachingQuality, studentEngagement, punctuality, professionalism, feedback, evaluatedBy } = req.body;
 
     if (!teacherName || !evaluationPeriod || !teachingQuality || !studentEngagement || !punctuality || !professionalism || !evaluatedBy) {
       return errorResponse(res, 'All required fields must be provided', 400);
@@ -33,6 +63,7 @@ exports.createEvaluation = async (req, res) => {
     const overallRating = ((parseFloat(teachingQuality) + parseFloat(studentEngagement) + parseFloat(punctuality) + parseFloat(professionalism)) / 4).toFixed(1);
 
     const evaluation = new PerformanceEvaluation({
+      teacher: teacher || null,
       teacherName,
       evaluationPeriod,
       teachingQuality: parseFloat(teachingQuality),
@@ -54,19 +85,20 @@ exports.createEvaluation = async (req, res) => {
 
 exports.updateEvaluation = async (req, res) => {
   try {
-    const { teacherName, evaluationPeriod, teachingQuality, studentEngagement, punctuality, professionalism, feedback, evaluatedBy } = req.body;
+    const { teacher, teacherName, evaluationPeriod, teachingQuality, studentEngagement, punctuality, professionalism, feedback, evaluatedBy } = req.body;
     const evaluation = await PerformanceEvaluation.findById(req.params.id);
 
     if (!evaluation) {
       return errorResponse(res, 'Evaluation not found', 404);
     }
 
+    if (teacher) evaluation.teacher = teacher;
     if (teacherName) evaluation.teacherName = teacherName;
     if (evaluationPeriod) evaluation.evaluationPeriod = evaluationPeriod;
-    if (teachingQuality) evaluation.teachingQuality = parseFloat(teachingQuality);
-    if (studentEngagement) evaluation.studentEngagement = parseFloat(studentEngagement);
-    if (punctuality) evaluation.punctuality = parseFloat(punctuality);
-    if (professionalism) evaluation.professionalism = parseFloat(professionalism);
+    if (teachingQuality !== undefined) evaluation.teachingQuality = parseFloat(teachingQuality);
+    if (studentEngagement !== undefined) evaluation.studentEngagement = parseFloat(studentEngagement);
+    if (punctuality !== undefined) evaluation.punctuality = parseFloat(punctuality);
+    if (professionalism !== undefined) evaluation.professionalism = parseFloat(professionalism);
     if (feedback) evaluation.feedback = feedback;
     if (evaluatedBy) evaluation.evaluatedBy = evaluatedBy;
 

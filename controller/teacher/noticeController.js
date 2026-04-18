@@ -65,6 +65,35 @@ exports.publishNotice = async (req, res) => {
   }
 };
 
+// Unpublish Notice
+exports.unpublishNotice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId).lean();
+    if (!admin || admin.role !== 'teacherAdmin') {
+      return res.status(403).json({ message: 'Only teacher admin can unpublish notices' });
+    }
+
+    const notice = await Notice.findById(id);
+    if (!notice) {
+      return res.status(404).json({ message: 'Notice not found' });
+    }
+
+    if (notice.branch.toString() !== admin.branch.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    notice.isPublished = false;
+    await notice.save();
+
+    res.status(200).json({ message: 'Notice unpublished successfully', notice });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // Get All Notices
 exports.getAllNotices = async (req, res) => {
   try {
@@ -77,7 +106,7 @@ exports.getAllNotices = async (req, res) => {
       return res.status(403).json({ message: 'Only teacher admin can view notices' });
     }
 
-    const searchQuery = { branch: admin.branch };
+    const searchQuery = { branch: admin.branch, createdBy: adminId };
     if (type) searchQuery.type = type;
     if (priority) searchQuery.priority = priority;
     if (isPublished !== undefined) searchQuery.isPublished = isPublished === 'true';

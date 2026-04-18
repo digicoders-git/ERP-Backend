@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../../controller/warden/wardenOptimizedController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/wardenAuth');
 
 // Optimized endpoints - all load in <1 second
 router.get('/dashboard/optimized', auth, ctrl.getOptimizedDashboard);

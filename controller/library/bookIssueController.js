@@ -1,32 +1,52 @@
 const BookIssue = require('../../model/BookIssue');
 const Book = require('../../model/Book');
 const LibraryMember = require('../../model/LibraryMember');
+const Student = require('../../model/Student');
 const Admin = require('../../model/Admin');
+const { successResponse, errorResponse, paginatedResponse } = require('../../responseFormatter');
 
 // Issue Book
 exports.issueBook = async (req, res) => {
   try {
-    const { bookId, memberId, issueDate, dueDate, issueMethod } = req.body;
+    const { bookId, memberId, studentId, issueDate, dueDate, issueMethod, randomBookId } = req.body;
+    const memberIdToUse = memberId || studentId;
     const adminId = req.userId;
+
+    console.log('Issuing book:', { bookId, memberIdToUse, dueDate, randomBookId });
 
     const admin = await Admin.findById(adminId);
     if (!admin || admin.role !== 'libraryAdmin') {
-      return res.status(403).json({ message: 'Only library admin can issue books' });
+      return errorResponse(res, 'Only library admin can issue books', 403);
     }
 
-    const [book, member] = await Promise.all([
+    const [book, libraryMember] = await Promise.all([
       Book.findById(bookId),
-      LibraryMember.findById(memberId)
+      LibraryMember.findById(memberIdToUse)
     ]);
 
-    if (!book) return res.status(404).json({ message: 'Book not found' });
-    if (book.availableCopies <= 0) return res.status(400).json({ message: 'No copies available' });
-    if (!member) return res.status(404).json({ message: 'Member not found' });
-    if (!member.status) return res.status(400).json({ message: 'Member is inactive' });
+    let member = libraryMember;
+    let memberType = 'LibraryMember';
+
+    if (!member) {
+      member = await Student.findById(memberIdToUse);
+      memberType = 'Student';
+    }
+
+    console.log('Member found:', member ? memberType : 'Not Found');
+
+    if (!book) return errorResponse(res, 'Book not found in database', 404);
+    if (book.availableCopies <= 0) return errorResponse(res, `No copies available for book: ${book.title}`, 400);
+    if (!member) return errorResponse(res, `Member not found with ID: ${memberIdToUse}`, 404);
+    
+    // Check status based on model type
+    const isActive = memberType === 'Student' ? (member.status === 'active' || member.status === 'Active') : member.status;
+    if (!isActive) return errorResponse(res, `Member account is currently ${member.status || 'inactive'}. Please activate first.`, 400);
 
     const bookIssue = new BookIssue({
       book: bookId,
-      member: memberId,
+      member: memberIdToUse,
+      memberType: memberType,
+      randomBookId: randomBookId || 'BK' + Math.random().toString(36).substr(2, 9).toUpperCase(),
       issueDate: issueDate || new Date(),
       dueDate,
       issueMethod: issueMethod || 'Manual',
@@ -39,9 +59,16 @@ exports.issueBook = async (req, res) => {
     book.issuedCopies = (book.issuedCopies || 0) + 1;
     await Promise.all([book.save(), bookIssue.save()]);
 
-    res.status(201).json({ message: 'Book issued successfully', bookIssue });
+    return successResponse(res, bookIssue, 'Book issued successfully', 201);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Issue Book Error:', error);
+    if (error.name === 'ValidationError') {
+      return errorResponse(res, `Validation Error: ${Object.values(error.errors).map(e => e.message).join(', ')}`, 400);
+    }
+    if (error.name === 'CastError') {
+      return errorResponse(res, `Invalid ID format: ${error.value}`, 400);
+    }
+    return errorResponse(res, 'Internal Server Error during book issuance', 500, error);
   }
 };
 
@@ -76,9 +103,9 @@ exports.returnBook = async (req, res) => {
 
     await Promise.all([book.save(), bookIssue.save()]);
 
-    res.status(200).json({ message: 'Book returned successfully', bookIssue });
+    return successResponse(res, bookIssue, 'Book returned successfully');
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    return errorResponse(res, 'Server error', 500, error);
   }
 };
 
@@ -106,7 +133,10 @@ exports.getAllBookIssues = async (req, res) => {
     const [bookIssues, total] = await Promise.all([
       BookIssue.find(searchQuery)
         .populate('book', 'title author ISBN barcode')
-        .populate('member', 'name email memberId')
+        .populate({
+          path: 'member',
+          select: 'name firstName lastName email memberId admissionNumber phone profileImage'
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -114,12 +144,32 @@ exports.getAllBookIssues = async (req, res) => {
       BookIssue.countDocuments(searchQuery)
     ]);
 
-    res.status(200).json({
-      bookIssues,
-      pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / limit) }
+    const formattedIssues = bookIssues.map(issue => {
+      const member = issue.member;
+      const memberName = issue.memberType === 'Student' 
+        ? `${member?.firstName || ''} ${member?.lastName || ''}`.trim()
+        : member?.name || 'Unknown';
+      
+      const memberId = issue.memberType === 'Student'
+        ? member?.admissionNumber || member?.rollNumber || 'N/A'
+        : member?.memberId || 'N/A';
+
+      return {
+        ...issue,
+        id: issue._id,
+        memberName,
+        memberId,
+        bookTitle: issue.book?.title || 'Unknown',
+        bookId: issue.book?._id,
+        issueDate: issue.issueDate ? new Date(issue.issueDate).toLocaleDateString() : 'N/A',
+        dueDate: issue.dueDate ? new Date(issue.dueDate).toLocaleDateString() : 'N/A',
+        returnDate: issue.returnDate ? new Date(issue.returnDate).toLocaleDateString() : null,
+      };
     });
+
+    return paginatedResponse(res, formattedIssues, total, page, limit);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    return errorResponse(res, 'Server error', 500, error);
   }
 };
 
@@ -134,13 +184,16 @@ exports.getBookIssueById = async (req, res) => {
 
     const bookIssue = await BookIssue.findById(req.params.id)
       .populate('book', 'title author ISBN barcode')
-      .populate('member', 'name email memberId')
+      .populate({
+        path: 'member',
+        select: 'name firstName lastName email memberId admissionNumber phone'
+      })
       .lean();
 
-    if (!bookIssue) return res.status(404).json({ message: 'Book issue record not found' });
+    if (!bookIssue) return errorResponse(res, 'Book issue record not found', 404);
 
-    res.status(200).json({ bookIssue });
+    return successResponse(res, bookIssue);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    return errorResponse(res, 'Server error', 500, error);
   }
 };

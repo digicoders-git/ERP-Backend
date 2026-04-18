@@ -40,7 +40,7 @@ const studentSchema = new mongoose.Schema({
   },
   gender: {
     type: String,
-    enum: ['male', 'female'],
+    enum: ['male', 'female', 'other'],
     required: true
   },
   dob: {
@@ -79,11 +79,21 @@ const studentSchema = new mongoose.Schema({
     required: true
   },
   previousEducation: {
+    previousCourseName: { type: String },
     previousSchoolName: { type: String },
+    previousSchoolAddress: { type: String },
+    previousMarksType: { type: String, enum: ['percentage', 'cgpa'] },
     previousPercentage: { type: Number },
     marksheet: { type: String },
     characterCertificate: { type: String },
-    transferCertificate: { type: String }
+    transferCertificate: { type: String },
+    migrationCertificate: { type: String }
+  },
+  medicalCertificate: {
+    type: String
+  },
+  casteCertificate: {
+    type: String
   },
   documents: {
     marksheet: { type: String },
@@ -92,10 +102,13 @@ const studentSchema = new mongoose.Schema({
     birthCertificate: { type: String },
     aadharCard: { type: String }
   },
+  stream: {
+    type: String
+  },
   class: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
-    required: true
+    required: false
   },
   section: {
     type: mongoose.Schema.Types.ObjectId,
@@ -168,6 +181,15 @@ const studentSchema = new mongoose.Schema({
     required: true
   }
 }, { timestamps: true });
+
+// Pre-save hook to ensure random admission ID
+studentSchema.pre('save', function(next) {
+  if (!this.admissionNumber) {
+    const randomPart = Math.floor(Math.random() * 900) + 100; // 3-digit random
+    this.admissionNumber = `STU-${randomPart}`;
+  }
+  next();
+});
 
 studentSchema.index({ branch: 1, status: 1 });
 studentSchema.index({ class: 1, section: 1, status: 1 });

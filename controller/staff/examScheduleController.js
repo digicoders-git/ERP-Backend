@@ -1,7 +1,7 @@
 const ExamSchedule = require('../../model/ExamSchedule');
 const Class = require('../../model/Class');
 const Section = require('../../model/Section');
-const Admin = require('../../model/Admin');
+const Staff = require('../../model/Staff');
 
 // Create Exam Schedule
 exports.createExamSchedule = async (req, res) => {
@@ -14,15 +14,15 @@ exports.createExamSchedule = async (req, res) => {
     
     const classId = req.body.classId || req.body.class;
     const sectionId = req.body.sectionId || req.body.section;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
     if (!classId || !sectionId) {
       return res.status(400).json({ message: 'Class and Section are required' });
     }
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can create exam schedules' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const classData = await Class.findById(classId);
@@ -30,11 +30,10 @@ exports.createExamSchedule = async (req, res) => {
       return res.status(404).json({ message: 'Class not found. Please select a valid class.' });
     }
 
-    if (classData.branch.toString() !== admin.branch.toString()) {
+    if (classData.branch.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Class does not belong to your branch' });
     }
 
-    // Validation for pre-board and board exams - only 10th and 12th
     if (examType === 'pre-board' || examType === 'board') {
       const className = classData.className.toLowerCase();
       if (!className.includes('10') && !className.includes('12') && 
@@ -55,7 +54,7 @@ exports.createExamSchedule = async (req, res) => {
       return res.status(400).json({ message: 'Section does not belong to the selected class' });
     }
 
-    if (section.branch.toString() !== admin.branch.toString()) {
+    if (section.branch.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Section does not belong to your branch' });
     }
 
@@ -73,9 +72,9 @@ exports.createExamSchedule = async (req, res) => {
       totalMarks,
       passingMarks,
       specialInstructions,
-      branch: admin.branch,
-      client: admin.client,
-      createdBy: adminId
+      branch: staff.branch,
+      client: staff.client,
+      createdBy: staffId
     });
 
     await newExamSchedule.save();
@@ -90,14 +89,14 @@ exports.getAllExamSchedules = async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', examType = '', classId = '' } = req.query;
     const skip = (page - 1) * limit;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can view exam schedules' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
-    const searchQuery = { branch: admin.branch };
+    const searchQuery = { branch: staff.branch };
 
     if (search) {
       searchQuery.$or = [
@@ -118,7 +117,7 @@ exports.getAllExamSchedules = async (req, res) => {
     const examSchedules = await ExamSchedule.find(searchQuery)
       .populate('class', 'className classCode')
       .populate('section', 'sectionName')
-      .populate('createdBy', 'email role')
+      .populate('createdBy', 'email')
       .sort({ examDate: 1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -143,24 +142,24 @@ exports.getAllExamSchedules = async (req, res) => {
 exports.getExamScheduleById = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can view exam schedule details' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const examSchedule = await ExamSchedule.findById(id)
       .populate('class', 'className classCode')
       .populate('section', 'sectionName')
       .populate('branch', 'branchName branchCode')
-      .populate('createdBy', 'email role');
+      .populate('createdBy', 'email');
 
     if (!examSchedule) {
       return res.status(404).json({ message: 'Exam schedule not found' });
     }
 
-    if (examSchedule.branch._id.toString() !== admin.branch.toString()) {
+    if (examSchedule.branch._id.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -182,11 +181,11 @@ exports.updateExamSchedule = async (req, res) => {
     
     const classId = req.body.classId || req.body.class;
     const sectionId = req.body.sectionId || req.body.section;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can update exam schedules' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const examSchedule = await ExamSchedule.findById(id);
@@ -194,15 +193,14 @@ exports.updateExamSchedule = async (req, res) => {
       return res.status(404).json({ message: 'Exam schedule not found' });
     }
 
-    if (examSchedule.branch.toString() !== admin.branch.toString()) {
+    if (examSchedule.branch.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (examSchedule.createdBy.toString() !== adminId) {
+    if (examSchedule.createdBy.toString() !== staffId) {
       return res.status(403).json({ message: 'You can only update your own exam schedules' });
     }
 
-    // Validation for class change with pre-board/board
     if (classId && (examType === 'pre-board' || examType === 'board' || examSchedule.examType === 'pre-board' || examSchedule.examType === 'board')) {
       const classData = await Class.findById(classId);
       if (!classData) {
@@ -254,11 +252,11 @@ exports.updateExamSchedule = async (req, res) => {
 exports.deleteExamSchedule = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can delete exam schedules' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const examSchedule = await ExamSchedule.findById(id);
@@ -266,11 +264,11 @@ exports.deleteExamSchedule = async (req, res) => {
       return res.status(404).json({ message: 'Exam schedule not found' });
     }
 
-    if (examSchedule.branch.toString() !== admin.branch.toString()) {
+    if (examSchedule.branch.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (examSchedule.createdBy.toString() !== adminId) {
+    if (examSchedule.createdBy.toString() !== staffId) {
       return res.status(403).json({ message: 'You can only delete your own exam schedules' });
     }
 

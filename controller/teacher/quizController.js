@@ -4,7 +4,7 @@ const Admin = require('../../model/Admin');
 // Create Quiz
 exports.createQuiz = async (req, res) => {
   try {
-    const { title, subject, numberOfQuestions, timeLimit } = req.body;
+    const { title, subject, numberOfQuestions, timeLimit, classId, sectionId } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
@@ -17,6 +17,8 @@ exports.createQuiz = async (req, res) => {
       subject,
       numberOfQuestions,
       timeLimit,
+      class: classId,
+      section: sectionId,
       branch: admin.branch,
       client: admin.client,
       createdBy: adminId
@@ -32,7 +34,7 @@ exports.createQuiz = async (req, res) => {
 // Get All Quizzes
 exports.getAllQuizzes = async (req, res) => {
   try {
-    const { page = 1, limit = 10, subject } = req.query;
+    const { page = 1, limit = 10, subject, classId, sectionId } = req.query;
     const skip = (page - 1) * limit;
     const adminId = req.userId;
 
@@ -41,11 +43,15 @@ exports.getAllQuizzes = async (req, res) => {
       return res.status(403).json({ message: 'Only teacher admin can view quizzes' });
     }
 
-    const searchQuery = { branch: admin.branch };
+    const searchQuery = { branch: admin.branch, createdBy: adminId };
     if (subject) searchQuery.subject = { $regex: subject, $options: 'i' };
+    if (classId) searchQuery.class = classId;
+    if (sectionId) searchQuery.section = sectionId;
 
     const quizzes = await Quiz.find(searchQuery)
       .populate('createdBy', 'email role')
+      .populate('class', 'className')
+      .populate('section', 'sectionName')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -99,7 +105,7 @@ exports.getQuizById = async (req, res) => {
 exports.updateQuiz = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, subject, numberOfQuestions, timeLimit } = req.body;
+    const { title, subject, numberOfQuestions, timeLimit, classId, sectionId, status } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
@@ -120,6 +126,9 @@ exports.updateQuiz = async (req, res) => {
     if (subject) quiz.subject = subject;
     if (numberOfQuestions) quiz.numberOfQuestions = numberOfQuestions;
     if (timeLimit) quiz.timeLimit = timeLimit;
+    if (classId) quiz.class = classId;
+    if (sectionId) quiz.section = sectionId;
+    if (status) quiz.status = status;
 
     await quiz.save();
     res.status(200).json({ message: 'Quiz updated successfully', quiz });

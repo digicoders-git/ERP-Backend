@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 
 const bookIssueSchema = new mongoose.Schema({
   book: { type: mongoose.Schema.Types.ObjectId, ref: 'Book', required: true },
-  member: { type: mongoose.Schema.Types.ObjectId, ref: 'LibraryMember', required: true },
+  member: { type: mongoose.Schema.Types.ObjectId, refPath: 'memberType', required: true },
+  memberType: { type: String, required: true, enum: ['Student', 'LibraryMember'], default: 'LibraryMember' },
+  randomBookId: { type: String, unique: true, sparse: true },
   issueDate: { type: Date, required: true },
   dueDate: { type: Date, required: true },
   returnDate: { type: Date, default: null },

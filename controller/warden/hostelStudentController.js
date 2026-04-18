@@ -1,5 +1,7 @@
 const HostelStudent = require('../../model/HostelStudent');
-const { successResponse,  errorResponse } = require('../../responseFormatter');
+const Student = require('../../model/Student');
+const Class = require('../../model/Class');
+const { successResponse, errorResponse } = require('../../responseFormatter');
 
 exports.getAll = async (req, res) => {
   try {
@@ -73,7 +75,34 @@ exports.remove = async (req, res) => {
 
 exports.getById = async (req, res) => {
   try {
-    const student = await HostelStudent.findById(req.params.id).lean();
+    let student = await HostelStudent.findById(req.params.id).lean();
+
+    // Fallback to generic Student model if not found in HostelStudent
+    if (!student) {
+      const legacyStudent = await Student.findById(req.params.id)
+        .populate('class', 'className')
+        .lean();
+
+      if (legacyStudent) {
+        student = {
+          ...legacyStudent,
+          name: legacyStudent.name || `${legacyStudent.firstName} ${legacyStudent.lastName}`,
+          phone: legacyStudent.phone || legacyStudent.mobile,
+          dateOfBirth: legacyStudent.dob ? new Date(legacyStudent.dob).toISOString().substr(0, 10) : null,
+          status: legacyStudent.status === 'active' ? 'Active' : 'Inactive',
+          // Bridge mapping for Hostel Panel profile modal
+          course: legacyStudent.stream || (legacyStudent.class?.className ? `${legacyStudent.class.className} Stream` : 'General'),
+          year: legacyStudent.class?.className || 'N/A',
+          parentName: legacyStudent.guardianInfo?.fatherName || legacyStudent.fatherName,
+          parentContact: legacyStudent.guardianInfo?.guardianPhone || 'N/A',
+          emergencyContact: legacyStudent.guardianInfo?.emergencyPhone,
+          bloodGroup: legacyStudent.bloodGroup || 'N/A',
+          address: legacyStudent.currentAddress?.address || legacyStudent.address,
+          admissionDate: legacyStudent.createdAt ? new Date(legacyStudent.createdAt).toISOString().substr(0, 10) : null
+        };
+      }
+    }
+
     if (!student) return errorResponse(res, 'Student not found', 404);
     return successResponse(res, student, 'Student fetched');
   } catch (error) {

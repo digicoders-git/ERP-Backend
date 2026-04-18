@@ -5,41 +5,62 @@ const bcrypt = require('bcryptjs');
 // Create Driver
 exports.createDriver = async (req, res) => {
   try {
-    const { name, mobileNo, password, licenseNo, licenseExpiryDate, experience } = req.body;
+    const { name, email, mobileNo, password, licenseNo, licenseExpiryDate, experience, address } = req.body;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
+    // Validate required fields
+    if (!name || !email || !mobileNo || !password || !licenseNo || !licenseExpiryDate || experience === undefined) {
+      return res.status(400).json({ message: 'All required fields must be provided' });
+    }
+
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+    if (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin') {
       return res.status(403).json({ message: 'Only branch admin or staff can create drivers' });
     }
 
+    // Check if email already exists
+    const existingEmail = await Driver.findOne({ email: email.toLowerCase() });
+    if (existingEmail) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    // Check if license number already exists
     const existingDriver = await Driver.findOne({ licenseNo: licenseNo.toUpperCase() });
     if (existingDriver) {
       return res.status(400).json({ message: 'License number already exists' });
     }
 
-    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-
     const newDriver = new Driver({
       name,
+      email: email.toLowerCase(),
       mobileNo,
+      password,
       licenseNo: licenseNo.toUpperCase(),
       licenseExpiryDate,
       experience,
-      branch: admin.branch,
-      client: admin.client,
+      address: address || null,
+      branch: admin.branch?._id || admin.branch,
+      client: admin.client?._id || admin.client,
       createdBy: adminId
     });
 
     await newDriver.save();
 
-    if (hashedPassword) {
-      await Driver.findByIdAndUpdate(newDriver._id, { password: hashedPassword });
-    }
-
     const driverData = newDriver.toObject();
     delete driverData.password;
-    res.status(201).json({ message: 'Driver created successfully', driver: driverData });
+    
+    res.status(201).json({ 
+      message: 'Driver created successfully', 
+      driver: driverData,
+      credentials: {
+        email: email.toLowerCase(),
+        password: password,
+        message: 'Share these credentials with the driver for login'
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -48,41 +69,46 @@ exports.createDriver = async (req, res) => {
 // Get All Drivers
 exports.getAllDrivers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '' } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || '';
     const skip = (page - 1) * limit;
-    const adminId = req.userId;
-    const admin = await Admin.findById(adminId);
+    const currentUserId = req.userId;
+    const currentUserRole = req.user.role;
 
-    if (!admin) {
-      return res.status(404).json({ message: 'Admin not found' });
-    }
+    let branchId = req.user.branch;
+    let clientId = req.user.client;
 
     const searchQuery = search ? {
       $or: [
         { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
         { mobileNo: { $regex: search, $options: 'i' } },
         { licenseNo: { $regex: search, $options: 'i' } }
       ]
     } : {};
 
     let drivers, total;
-    if (admin.role === 'branchAdmin' || admin.role === 'staffAdmin') {
-      searchQuery.branch = admin.branch;
+    const adminBranchId = branchId?.toString();
+    const adminClientId = clientId?.toString();
+
+    if (currentUserRole === 'branchAdmin' || currentUserRole === 'staffAdmin' || currentUserRole === 'driver') {
+      searchQuery.branch = adminBranchId;
       drivers = await Driver.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(limit);
       total = await Driver.countDocuments(searchQuery);
-    } else if (admin.role === 'clientAdmin') {
-      searchQuery.client = admin.client;
+    } else if (currentUserRole === 'clientAdmin') {
+      searchQuery.client = adminClientId;
       drivers = await Driver.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(limit);
       total = await Driver.countDocuments(searchQuery);
     } else {
       drivers = await Driver.find(searchQuery)
@@ -91,7 +117,7 @@ exports.getAllDrivers = async (req, res) => {
         .populate('createdBy', 'email role')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(limit);
       total = await Driver.countDocuments(searchQuery);
     }
 
@@ -99,12 +125,13 @@ exports.getAllDrivers = async (req, res) => {
       drivers, 
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         totalPages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
+    console.error('Get all drivers error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -115,7 +142,7 @@ exports.getDriverById = async (req, res) => {
     const { id } = req.params;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
@@ -129,11 +156,17 @@ exports.getDriverById = async (req, res) => {
       return res.status(404).json({ message: 'Driver not found' });
     }
 
-    if (admin.role === 'branchAdmin' && driver.branch._id.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const driverBranchId = driver.branch?._id?.toString() || driver.branch?.toString();
+
+    if (admin.role === 'branchAdmin' && driverBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (admin.role === 'clientAdmin' && driver.client._id.toString() !== admin.client.toString()) {
+    const adminClientId = admin.client?._id?.toString() || admin.client?.toString();
+    const driverClientId = driver.client?._id?.toString() || driver.client?.toString();
+
+    if (admin.role === 'clientAdmin' && driverClientId !== adminClientId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -147,11 +180,14 @@ exports.getDriverById = async (req, res) => {
 exports.updateDriver = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, mobileNo, password, licenseNo, licenseExpiryDate, experience } = req.body;
+    const { name, email, mobileNo, password, licenseNo, licenseExpiryDate, experience, address } = req.body;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+    if (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin') {
       return res.status(403).json({ message: 'Only branch admin or staff can update drivers' });
     }
 
@@ -160,26 +196,37 @@ exports.updateDriver = async (req, res) => {
       return res.status(404).json({ message: 'Driver not found' });
     }
 
-    if (driver.branch.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const driverBranchId = driver.branch?.toString();
+
+    if (driverBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Check if email is being changed and if new email already exists
+    if (email && email.toLowerCase() !== driver.email) {
+      const existingEmail = await Driver.findOne({ email: email.toLowerCase(), _id: { $ne: id } });
+      if (existingEmail) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
+    }
+
+    // Check if license number is being changed and if new license already exists
     if (licenseNo && licenseNo.toUpperCase() !== driver.licenseNo) {
-      const existingDriver = await Driver.findOne({ licenseNo: licenseNo.toUpperCase() });
+      const existingDriver = await Driver.findOne({ licenseNo: licenseNo.toUpperCase(), _id: { $ne: id } });
       if (existingDriver) {
         return res.status(400).json({ message: 'License number already exists' });
       }
     }
 
     if (name) driver.name = name;
+    if (email) driver.email = email.toLowerCase();
     if (mobileNo) driver.mobileNo = mobileNo;
     if (licenseNo) driver.licenseNo = licenseNo.toUpperCase();
     if (licenseExpiryDate) driver.licenseExpiryDate = licenseExpiryDate;
-    if (experience !== undefined) driver.experience = experience;
-
-    if (password) {
-      await Driver.findByIdAndUpdate(id, { password: await bcrypt.hash(password, 10) });
-    }
+    if (experience !== undefined && experience !== '') driver.experience = experience;
+    if (address !== undefined) driver.address = address;
+    if (password && password.trim()) driver.password = password;
 
     await driver.save();
 
@@ -197,8 +244,11 @@ exports.deleteDriver = async (req, res) => {
     const { id } = req.params;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+    if (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin') {
       return res.status(403).json({ message: 'Only branch admin or staff can delete drivers' });
     }
 
@@ -207,7 +257,10 @@ exports.deleteDriver = async (req, res) => {
       return res.status(404).json({ message: 'Driver not found' });
     }
 
-    if (driver.branch.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const driverBranchId = driver.branch?.toString();
+
+    if (driverBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -224,8 +277,11 @@ exports.toggleDriverStatus = async (req, res) => {
     const { id } = req.params;
     const adminId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin')) {
+    const admin = await Admin.findById(adminId).populate('branch').populate('client');
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+    if (admin.role !== 'branchAdmin' && admin.role !== 'staffAdmin') {
       return res.status(403).json({ message: 'Only branch admin or staff can toggle driver status' });
     }
 
@@ -234,7 +290,10 @@ exports.toggleDriverStatus = async (req, res) => {
       return res.status(404).json({ message: 'Driver not found' });
     }
 
-    if (driver.branch.toString() !== admin.branch.toString()) {
+    const adminBranchId = admin.branch?._id?.toString() || admin.branch?.toString();
+    const driverBranchId = driver.branch?.toString();
+
+    if (driverBranchId !== adminBranchId) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

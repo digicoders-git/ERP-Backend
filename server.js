@@ -5,11 +5,16 @@ const cors = require('cors');
 const path = require('path');
 const connectDB = require('./config/db');
 const errorHandler = require('./errorHandler');
-const { cacheMiddleware, CACHE_DURATION } = require('./cache');
+const { initCache } = require('./utils/cache');
+
+// All route imports...
 const adminRoutes = require('./router/adminRoutes');
 const planRoutes = require('./router/planRoutes');
 const clientRoutes = require('./router/clientRoutes');
 const branchRoutes = require('./router/branchRoutes');
+const superAdminProfileRoutes = require('./router/superAdminProfileRoutes');
+const schoolAdminProfileRoutes = require('./router/schoolAdminProfileRoutes');
+const branchAdminProfileRoutes = require('./router/branchAdminProfileRoutes');
 const staffRoutes = require('./router/staffRoutes');
 const taskRoutes = require('./router/taskRoutes');
 const teacherRoutes = require('./router/teacherRoutes');
@@ -24,13 +29,24 @@ const wardenRoutes = require('./router/wardenRoutes');
 const hostelAllocationRoutes = require('./router/hostelAllocationRoutes');
 const vehicleRoutes = require('./router/vehicleRoutes');
 const driverRoutes = require('./router/driverRoutes');
+const driverSalaryRoutes = require('./router/driverSalaryRoutes');
 const routeRoutes = require('./router/routeRoutes');
 const routeStopRoutes = require('./router/routeStopRoutes');
 const routeChargeRoutes = require('./router/routeChargeRoutes');
 const transportAssignmentRoutes = require('./router/transportAssignmentRoutes');
 const transportAllocationRoutes = require('./router/transportAllocationRoutes');
 
-// Staff Panel Routes
+// Transport Panel APIs
+const driverPanelRoutes = require('./router/transport/driverPanelRoutes');
+const vehicleChecklistRoutes = require('./router/transport/vehicleChecklistRoutes');
+const driverComplaintRoutes = require('./router/transport/driverComplaintRoutes');
+const salaryDocumentsRoutes = require('./router/transport/salaryDocumentsRoutes');
+const gpsTrackingRoutes = require('./router/transport/gpsTrackingRoutes');
+const transportPanelRoutes = require('./router/transport/transportPanelRoutes');
+const driverLoginRoutes = require('./router/transport/driverLoginRoutes');
+const transportAttendanceRoutes = require('./router/transport/transportAttendanceRoutes');
+
+// All other routes...
 const staffAdmissionRoutes = require('./router/staff/admissionRoutes');
 const staffNoticeRoutes = require('./router/staff/noticeRoutes');
 const staffExamScheduleRoutes = require('./router/staff/examScheduleRoutes');
@@ -39,6 +55,7 @@ const staffStudentRoutes = require('./router/staff/studentRoutes');
 const staffFeeCollectionRoutes = require('./router/staff/feeCollectionRoutes');
 const staffExamRoutes = require('./router/staff/examRoutes');
 const staffIdCardRoutes = require('./router/staff/idCardRoutes');
+const notificationRoutes = require('./router/notificationRoutes');
 const staffClassRoutes = require('./router/staff/classRoutes');
 const staffReportRoutes = require('./router/staff/reportRoutes');
 const staffELearningRoutes = require('./router/staff/eLearningRoutes');
@@ -46,14 +63,16 @@ const staffProfileRoutes = require('./router/staff/profileRoutes');
 const staffHostelRoutes = require('./router/staff/hostelRoutes');
 const staffTransportRoutes = require('./router/staff/transportRoutes');
 const staffLibrarianRoutes = require('./router/staff/librarianRoutes');
+const staffLibraryRoutes = require('./router/staff/libraryRoutes');
 const staffTeacherManagementRoutes = require('./router/staff/teacherManagementRoutes');
 const staffSalaryRoutes = require('./router/staff/salaryRoutes');
 const staffPerformanceEvaluationRoutes = require('./router/staff/performanceEvaluationRoutes');
 const staffTeacherAttendanceRoutes = require('./router/staff/teacherAttendanceRoutes');
 const staffDocumentRoutes = require('./router/staff/documentRoutes');
 const staffNotificationRoutes = require('./router/staff/notificationRoutes');
+const staffTimetableRoutes = require('./router/staff/timetableRoutes');
+const staffFeeAdminRoutes = require('./router/staff/feeAdminRoutes');
 
-// Fee Panel Routes
 const feeStructureRoutes = require('./router/fee/feeStructureRoutes');
 const feeAdminRoutes = require('./router/fee/feeAdminRoutes');
 const feeDashboardRoutes = require('./router/fee/feeDashboardRoutes');
@@ -61,7 +80,6 @@ const feeReportsRoutes = require('./router/fee/feeReportsRoutes');
 const feeExtrasRoutes = require('./router/fee/feeExtrasRoutes');
 const paymentGatewayRoutes = require('./router/fee/paymentGatewayRoutes');
 
-// Warden Panel Routes
 const hostelMenuRoutes = require('./router/warden/hostelMenuRoutes');
 const hostelAttendanceRoutes = require('./router/warden/hostelAttendanceRoutes');
 const messAttendanceRoutes = require('./router/warden/messAttendanceRoutes');
@@ -82,22 +100,7 @@ const messManagementRoutes = require('./router/warden/messManagementRoutes');
 const hostelStudentRoutes = require('./router/warden/hostelStudentRoutes');
 const wardenOptimizedRoutes = require('./router/warden/wardenOptimizedRoutes');
 
-// Library Panel Routes
-const libraryAdminRoutes = require('./router/library/libraryAdminRoutes');
-const bookRoutes = require('./router/library/bookRoutes');
-const memberRoutes = require('./router/library/memberRoutes');
-const bookIssueRoutes = require('./router/library/bookIssueRoutes');
-const libraryStudentRoutes = require('./router/library/studentRoutes');
-const bookRequestRoutes = require('./router/library/bookRequestRoutes');
-const bookCategorizationRoutes = require('./router/library/bookCategorizationRoutes');
-const libraryCardRoutes = require('./router/library/libraryCardRoutes');
-const bookLimitRoutes = require('./router/library/bookLimitRoutes');
-const digitalLibraryRoutes = require('./router/library/digitalLibraryRoutes');
-const libraryAuthRoutes = require('./router/library/libraryAuthRoutes');
-const barcodeFineRoutes = require('./router/library/barcodeFineRoutes');
-const libraryReportsRoutes = require('./router/library/libraryReportsRoutes');
-
-// Teacher Panel Routes
+const teacherAuthRoutes = require('./router/teacher/authRoutes');
 const timetableRoutes = require('./router/teacher/timetableRoutes');
 const assignmentRoutes = require('./router/teacher/assignmentRoutes');
 const diaryRoutes = require('./router/teacher/diaryRoutes');
@@ -110,29 +113,31 @@ const teacherAttendanceRoutes = require('./router/teacher/attendanceRoutes');
 const teacherReportsRoutes = require('./router/teacher/reportsRoutes');
 const parentAlertsRoutes = require('./router/teacher/parentAlertsRoutes');
 const teacherDashboardRoutes = require('./router/teacher/dashboardRoutes');
+const teacherProfileRoutes = require('./router/teacher/profileRoutes');
+const debugCheckRoutes = require('./router/teacher/debugCheckRoutes');
+const teacherSalaryRoutes = require('./router/teacher/salaryRoutes');
+const teacherPerformanceEvaluationRoutes = require('./router/teacher/performanceEvaluationRoutes');
 
-// Branch Admin Routes
 const admissionRoutes = require('./router/admissionRoutes');
 const branchDashboardRoutes = require('./router/branchDashboardRoutes');
 const branchReportsRoutes = require('./router/branchReportsRoutes');
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Serve static files (uploaded images)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Database Connection
 connectDB();
+initCache().catch(err => console.warn('Cache initialization skipped:', err.message));
 
-// Routes
+// All existing routes...
 app.use('/api/admin', adminRoutes);
 app.use('/api/plan', planRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/branch', branchRoutes);
+app.use('/api/super-admin', superAdminProfileRoutes);
+app.use('/api/school-admin', schoolAdminProfileRoutes);
+app.use('/api/branch-admin', branchAdminProfileRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/task', taskRoutes);
 app.use('/api/teacher', teacherRoutes);
@@ -147,13 +152,25 @@ app.use('/api/warden', wardenRoutes);
 app.use('/api/hostel-allocation', hostelAllocationRoutes);
 app.use('/api/vehicle', vehicleRoutes);
 app.use('/api/driver', driverRoutes);
+app.use('/api/driver-salary', driverSalaryRoutes);
 app.use('/api/route', routeRoutes);
 app.use('/api/route-stop', routeStopRoutes);
 app.use('/api/route-charge', routeChargeRoutes);
 app.use('/api/transport-assignment', transportAssignmentRoutes);
 app.use('/api/transport-allocation', transportAllocationRoutes);
 
-// Staff Panel APIs
+// Transport Panel APIs - WITH ATTENDANCE
+app.use('/api/transport-panel/driver', driverPanelRoutes);
+app.use('/api/transport-panel/checklist', vehicleChecklistRoutes);
+app.use('/api/transport-panel/complaints', driverComplaintRoutes);
+app.use('/api/transport-panel/salary-docs', salaryDocumentsRoutes);
+app.use('/api/transport-panel/gps', gpsTrackingRoutes);
+app.use('/api/transport-panel/attendance', transportAttendanceRoutes);
+app.use('/api/transport', transportPanelRoutes);
+app.use('/api/driver-auth', driverLoginRoutes);
+
+// All other panel routes...
+app.use('/api/staff-panel/auth', require('./router/staff/authRoutes'));
 app.use('/api/staff-panel/admission', staffAdmissionRoutes);
 app.use('/api/staff-panel/notice', staffNoticeRoutes);
 app.use('/api/staff-panel/exam-schedule', staffExamScheduleRoutes);
@@ -167,16 +184,19 @@ app.use('/api/staff-panel/report', staffReportRoutes);
 app.use('/api/staff-panel/e-learning', staffELearningRoutes);
 app.use('/api/staff-panel/profile', staffProfileRoutes);
 app.use('/api/staff-panel/hostel', staffHostelRoutes);
+app.use('/api/staff-panel/notification', notificationRoutes);
 app.use('/api/staff-panel/transport', staffTransportRoutes);
 app.use('/api/staff-panel/librarian', staffLibrarianRoutes);
+app.use('/api/staff-panel/library', staffLibraryRoutes);
 app.use('/api/staff-panel/teacher-management', staffTeacherManagementRoutes);
 app.use('/api/staff-panel/salary', staffSalaryRoutes);
 app.use('/api/staff-panel/performance-evaluation', staffPerformanceEvaluationRoutes);
 app.use('/api/staff-panel/teacher-attendance', staffTeacherAttendanceRoutes);
 app.use('/api/staff-panel/documents', staffDocumentRoutes);
 app.use('/api/staff-panel/notifications', staffNotificationRoutes);
+app.use('/api/staff-panel/timetable', staffTimetableRoutes);
+app.use('/api/staff-panel/fee-admin', staffFeeAdminRoutes);
 
-// Fee Panel APIs
 app.use('/api/fee-panel/fee-structure', feeStructureRoutes);
 app.use('/api/fee-panel/fee-admin', feeAdminRoutes);
 app.use('/api/fee-panel/dashboard', feeDashboardRoutes);
@@ -184,7 +204,6 @@ app.use('/api/fee-panel/reports', feeReportsRoutes);
 app.use('/api/fee-panel/extras', feeExtrasRoutes);
 app.use('/api/fee-panel/payment', paymentGatewayRoutes);
 
-// Warden Panel APIs
 app.use('/api/warden-panel/hostel-menu', hostelMenuRoutes);
 app.use('/api/warden-panel/attendance', hostelAttendanceRoutes);
 app.use('/api/warden-panel/mess-attendance', messAttendanceRoutes);
@@ -205,22 +224,7 @@ app.use('/api/warden-panel/students', hostelStudentRoutes);
 app.use('/api/warden-panel/optimized', wardenOptimizedRoutes);
 app.use('/api/warden-auth', wardenAuthRoutes);
 
-// Library Panel APIs
-app.use('/api/library-panel/library-admin', libraryAdminRoutes);
-app.use('/api/library-panel/book', bookRoutes);
-app.use('/api/library-panel/member', memberRoutes);
-app.use('/api/library-panel/book-issue', bookIssueRoutes);
-app.use('/api/library-panel/student', libraryStudentRoutes);
-app.use('/api/library-panel/book-request', bookRequestRoutes);
-app.use('/api/library-panel/book-categorization', bookCategorizationRoutes);
-app.use('/api/library-panel/library-card', libraryCardRoutes);
-app.use('/api/library-panel/book-limit', bookLimitRoutes);
-app.use('/api/library-panel/digital-library', digitalLibraryRoutes);
-app.use('/api/library-panel/auth', libraryAuthRoutes);
-app.use('/api/library-panel/reports', libraryReportsRoutes);
-app.use('/api/library-panel/barcode-fine', barcodeFineRoutes);
-
-// Teacher Panel APIs
+app.use('/api/teacher-panel/auth', teacherAuthRoutes);
 app.use('/api/teacher-panel/timetable', timetableRoutes);
 app.use('/api/teacher-panel/assignment', assignmentRoutes);
 app.use('/api/teacher-panel/diary', diaryRoutes);
@@ -233,8 +237,11 @@ app.use('/api/teacher-panel/attendance', teacherAttendanceRoutes);
 app.use('/api/teacher-panel/reports', teacherReportsRoutes);
 app.use('/api/teacher-panel/parent-alerts', parentAlertsRoutes);
 app.use('/api/teacher-panel/dashboard', teacherDashboardRoutes);
+app.use('/api/teacher-panel/salary', teacherSalaryRoutes);
+app.use('/api/teacher-panel/debug', debugCheckRoutes);
+app.use('/api/teacher-panel/performance-evaluation', teacherPerformanceEvaluationRoutes);
+app.use('/api/teacher-panel', teacherProfileRoutes);
 
-// Branch Admin APIs
 app.use('/api/admission', admissionRoutes);
 app.use('/api/branch-admin', branchDashboardRoutes);
 app.use('/api/branch-admin/reports', branchReportsRoutes);
@@ -242,7 +249,6 @@ app.use('/api/branch-admin/reports', branchReportsRoutes);
 const approvalRoutes = require('./router/approvalRoutes');
 app.use('/api/approval', approvalRoutes);
 
-// Staff Panel - New APIs
 const leaveRoutes = require('./router/leaveRoutes');
 const attendanceRoutes = require('./router/attendanceRoutes');
 const feeReportRoutes = require('./router/feeReportRoutes');
@@ -257,61 +263,85 @@ app.use('/api/alumni', alumniRoutes);
 app.use('/api/event', eventRoutes);
 app.use('/api/staff-quiz', staffQuizRoutes);
 
-// Optimized Routes for Admin Panel
 const staffOptimizedRoutes = require('./router/staff/staffOptimizedRoutes');
 const teacherOptimizedRoutes = require('./router/staff/teacherOptimizedRoutes');
 const feeOptimizedRoutes = require('./router/fee/feeOptimizedRoutes');
-const libraryOptimizedRoutes = require('./router/library/libraryOptimizedRoutes');
 const hostelOptimizedRoutes = require('./router/hostelOptimizedRoutes');
 const transportOptimizedRoutes = require('./router/transportOptimizedRoutes');
 const studentOptimizedRoutes = require('./router/studentOptimizedRoutes');
+const libraryOptimizedRoutes = require('./router/libraryOptimizedRoutes');
 
 app.use('/api/admin-panel/staff', staffOptimizedRoutes);
 app.use('/api/admin-panel/teachers', teacherOptimizedRoutes);
 app.use('/api/admin-panel/fees', feeOptimizedRoutes);
-app.use('/api/admin-panel/library', libraryOptimizedRoutes);
 app.use('/api/admin-panel/hostel', hostelOptimizedRoutes);
 app.use('/api/admin-panel/transport', transportOptimizedRoutes);
 app.use('/api/admin-panel/students', studentOptimizedRoutes);
+app.use('/api/admin-panel/library', libraryOptimizedRoutes);
 
-// Transport Panel APIs
-const driverPanelRoutes = require('./router/transport/driverPanelRoutes');
-const vehicleChecklistRoutes = require('./router/transport/vehicleChecklistRoutes');
-const driverComplaintRoutes = require('./router/transport/driverComplaintRoutes');
-const salaryDocumentsRoutes = require('./router/transport/salaryDocumentsRoutes');
-const gpsTrackingRoutes = require('./router/transport/gpsTrackingRoutes');
-app.use('/api/transport-panel/driver', driverPanelRoutes);
-app.use('/api/transport-panel/checklist', vehicleChecklistRoutes);
-app.use('/api/transport-panel/complaints', driverComplaintRoutes);
-app.use('/api/transport-panel/salary-docs', salaryDocumentsRoutes);
-app.use('/api/transport-panel/gps', gpsTrackingRoutes);
-
-// Reports APIs
 const reportsRoutes = require('./router/reportsRoutes');
 app.use('/api/reports', reportsRoutes);
 
-// Super Admin Reports APIs
 const superAdminReportRoutes = require('./router/superAdminReportRoutes');
 app.use('/api/super-admin/reports', superAdminReportRoutes);
 
-// Parent/Student Panel APIs
+const libraryAuthRoutes = require('./router/library/libraryAuthRoutes');
+const libraryDashboardRoutes = require('./router/library/libraryDashboardRoutes');
+const libraryBookRoutes = require('./router/library/bookRoutes');
+const libraryBookCategorizationRoutes = require('./router/library/bookCategorizationRoutes');
+const libraryBookIssueRoutes = require('./router/library/bookIssueRoutes');
+const libraryBookRequestRoutes = require('./router/library/bookRequestRoutes');
+const libraryBookLimitRoutes = require('./router/library/bookLimitRoutes');
+const libraryCardRoutes = require('./router/library/libraryCardRoutes');
+const libraryMemberRoutes = require('./router/library/memberRoutes');
+const libraryStudentRoutes = require('./router/library/studentRoutes');
+const libraryDigitalLibraryRoutes = require('./router/library/digitalLibraryRoutes');
+const libraryAdminRoutes = require('./router/library/libraryAdminRoutes');
+const libraryProfileRoutes = require('./router/library/libraryProfileRoutes');
+const libraryReportsRoutes = require('./router/library/libraryReportsRoutes');
+const barcodeFineRoutes = require('./router/library/barcodeFineRoutes');
+
+app.use('/api/library-panel/auth', libraryAuthRoutes);
+app.use('/api/library-panel/dashboard', libraryDashboardRoutes);
+app.use('/api/library-panel/book', libraryBookRoutes);
+app.use('/api/library-panel/book-categorization', libraryBookCategorizationRoutes);
+app.use('/api/library-panel/book-issue', libraryBookIssueRoutes);
+app.use('/api/library-panel/book-request', libraryBookRequestRoutes);
+app.use('/api/library-panel/book-limit', libraryBookLimitRoutes);
+app.use('/api/library-panel/library-card', libraryCardRoutes);
+app.use('/api/library-panel/member', libraryMemberRoutes);
+app.use('/api/library-panel/student', libraryStudentRoutes);
+app.use('/api/library-panel/digital-library', libraryDigitalLibraryRoutes);
+app.use('/api/library-panel/admin', libraryAdminRoutes);
+app.use('/api/library-panel/profile', libraryProfileRoutes);
+app.use('/api/library-panel/reports', libraryReportsRoutes);
+app.use('/api/library-panel/barcode-fine', barcodeFineRoutes);
+
 const parentStudentRoutes = require('./router/parentStudentRoutes');
 app.use('/api/parent-student', parentStudentRoutes);
 
-// Admin/School Panel APIs
 const adminPanelRoutes = require('./router/adminPanelRoutes');
 app.use('/api/school-admin', adminPanelRoutes);
 
-// Health Check
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { 
+  setHeaders: (res, path) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+  }
+}));
+
 app.get('/', (req, res) => {
   res.json({ message: 'ERP Backend Server Running' });
 });
 
-// Test Routes (No Auth Required)
-const testRoutes = require('./router/testRoutes');
-app.use('/api/test', testRoutes);
+app.use((req, res) => {
+  console.warn(`Route not found: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.method} ${req.path}`,
+    timestamp: new Date().toISOString()
+  });
+});
 
-// Error Handler Middleware
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5002;

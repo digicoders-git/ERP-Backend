@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-04-18T05:39:13.838Z",
+  "user": {
+    "id": "69e232e80813d453fbb4a251",
+    "branch": "69d61d2fa9c89eaa23b68dec",
+    "client": "69d600eab45ba5f7c0137cf6"
+  },
+  "student": {
+    "id": "69d9e65486af4df13dacc0c1",
+    "class": "69d7817d9c4058285eb24159",
+    "section": "69d78462381a1592587ae72b"
+  },
+  "matchers": {
+    "branchId": "69d61d2fa9c89eaa23b68dec",
+    "studentClassId": "69d7817d9c4058285eb24159",
+    "studentClassName": "Class 11"
+  }
+}

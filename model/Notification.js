@@ -9,7 +9,21 @@ const notificationSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   message: { type: String, required: true, trim: true },
   recipients: { type: String, trim: true },
-  method: { type: String, enum: ['email', 'sms', 'both'], default: 'email' },
+  recipientType: {
+    type: [String],
+    enum: ['parents', 'students', 'staff', 'teachers', 'all'],
+    default: ['all']
+  },
+  recipientIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'recipientModel'
+  }],
+  recipientModel: {
+    type: String,
+    enum: ['Parent', 'Student', 'Staff', 'Teacher'],
+    default: 'Parent'
+  },
+  method: { type: String, enum: ['email', 'sms', 'both', 'in-app'], default: 'email' },
   status: { type: String, enum: ['sent', 'pending', 'failed'], default: 'pending' },
   branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
   client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },

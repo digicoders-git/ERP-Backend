@@ -2,14 +2,17 @@ const Hostel = require('../model/Hostel');
 const Room = require('../model/Room');
 const HostelAllocation = require('../model/HostelAllocation');
 const Student = require('../model/Student');
+const mongoose = require('mongoose');
 
 exports.getHostelStats = async (req, res) => {
   try {
     const { branch } = req.query;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const matchQ = adminBranch ? { branch: adminBranch } : branch ? { branch: new mongoose.Types.ObjectId(branch) } : adminClient ? { client: adminClient } : {};
 
     const stats = await Room.aggregate([
-      { $match: { branch: adminBranch || branch } },
+      { $match: matchQ },
       {
         $facet: {
           totalRooms: [{ $count: 'count' }],
@@ -21,7 +24,7 @@ exports.getHostelStats = async (req, res) => {
       }
     ]);
 
-    const hostelCount = await Hostel.countDocuments({ branch: adminBranch || branch });
+    const hostelCount = await Hostel.countDocuments(matchQ);
 
     res.status(200).json({
       success: true,
@@ -45,16 +48,18 @@ exports.getHostels = async (req, res) => {
   try {
     const { branch, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const q = adminBranch ? { branch: adminBranch } : branch ? { branch: new mongoose.Types.ObjectId(branch) } : adminClient ? { client: adminClient } : {};
 
     const [hostels, total] = await Promise.all([
-      Hostel.find({ branch: adminBranch || branch })
+      Hostel.find(q)
         .select('name address warden capacity status createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
         .lean(),
-      Hostel.countDocuments({ branch: adminBranch || branch })
+      Hostel.countDocuments(q)
     ]);
 
     res.status(200).json({
@@ -76,9 +81,10 @@ exports.getRooms = async (req, res) => {
   try {
     const { branch, hostelId, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
-    const query = { branch: adminBranch || branch };
+    const query = adminBranch ? { branch: adminBranch } : branch ? { branch: new mongoose.Types.ObjectId(branch) } : adminClient ? { client: adminClient } : {};
     if (hostelId) query.hostelId = hostelId;
 
     const [rooms, total] = await Promise.all([
@@ -109,10 +115,12 @@ exports.getRooms = async (req, res) => {
 exports.getAllocations = async (req, res) => {
   try {
     const { branch, limit = 10 } = req.query;
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const matchQ = adminBranch ? { branch: adminBranch } : branch ? { branch: new mongoose.Types.ObjectId(branch) } : adminClient ? { client: adminClient } : {};
 
     const allocations = await HostelAllocation.aggregate([
-      { $match: { branch: adminBranch || branch } },
+      { $match: matchQ },
       {
         $lookup: {
           from: 'students',
@@ -184,26 +192,15 @@ exports.getVacantRooms = async (req, res) => {
 
 exports.getHostelDashboard = async (req, res) => {
   try {
-    const adminBranch = req.user.branch;
+    const adminBranch = req.user.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
+    const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
+    const matchQ = adminBranch ? { branch: adminBranch } : adminClient ? { client: adminClient } : {};
 
     const [roomStats, hostelCount, allocations, recentAllocations] = await Promise.all([
-      Room.aggregate([
-        { $match: { branch: adminBranch } },
-        {
-          $facet: {
-            total: [{ $count: 'count' }],
-            occupied: [{ $match: { occupancy: { $gt: 0 } } }, { $count: 'count' }],
-            vacant: [{ $match: { occupancy: 0 } }, { $count: 'count' }]
-          }
-        }
-      ]),
-      Hostel.countDocuments({ branch: adminBranch }),
-      HostelAllocation.countDocuments({ branch: adminBranch }),
-      HostelAllocation.find({ branch: adminBranch })
-        .select('studentId roomId allocationDate')
-        .sort({ allocationDate: -1 })
-        .limit(5)
-        .lean()
+      Room.aggregate([{ $match: matchQ }, { $facet: { total: [{ $count: 'count' }], occupied: [{ $match: { occupancy: { $gt: 0 } } }, { $count: 'count' }], vacant: [{ $match: { occupancy: 0 } }, { $count: 'count' }] } }]),
+      Hostel.countDocuments(matchQ),
+      HostelAllocation.countDocuments(matchQ),
+      HostelAllocation.find(matchQ).select('studentId roomId allocationDate').sort({ allocationDate: -1 }).limit(5).lean()
     ]);
 
     res.status(200).json({

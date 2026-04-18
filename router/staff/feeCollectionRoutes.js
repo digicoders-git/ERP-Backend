@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const feeCollectionController = require('../../controller/staff/feeCollectionController');
-const auth = require('../../middleware/auth');
+const auth = require('../../middleware/staffAuth');
 
 router.post('/collect', auth, feeCollectionController.collectFee);
 router.get('/all', auth, feeCollectionController.getFeeCollections);

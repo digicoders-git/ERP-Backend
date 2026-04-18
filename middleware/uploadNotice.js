@@ -1,9 +1,15 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const { cloudinaryUpload } = require('./uploadMiddleware');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/notices/');
+    const uploadDir = path.join('uploads', 'admin', 'notices');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + '-' + file.originalname);
@@ -31,4 +37,14 @@ const uploadNotice = multer({
   fileFilter: fileFilter
 });
 
-module.exports = uploadNotice;
+const setNoticeHeaders = (req, res, next) => {
+  req.headers['x-panel-name'] = 'admin';
+  req.headers['x-category-name'] = 'notices';
+  next();
+};
+
+module.exports = {
+  uploadNotice,
+  setNoticeHeaders,
+  cloudinaryUpload
+};

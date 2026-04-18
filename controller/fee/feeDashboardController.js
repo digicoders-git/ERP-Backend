@@ -1,13 +1,14 @@
+const mongoose = require('mongoose');
 const FeeCollection = require('../../model/FeeCollection');
 const Student = require('../../model/Student');
 const FeeStructure = require('../../model/FeeStructure');
 const Admin = require('../../model/Admin');
 
+
 // Get Dashboard Summary
 exports.getDashboardSummary = async (req, res) => {
   try {
     const admin = await Admin.findById(req.userId).lean();
-    const mongoose = require('mongoose');
     const branchId = new mongoose.Types.ObjectId(admin.branch);
 
     const today = new Date();
@@ -40,13 +41,21 @@ exports.getDashboardSummary = async (req, res) => {
       ]),
       
       FeeCollection.find({ branch: branchId, status: { $in: ['paid', 'partial'] } })
-        .populate('student', 'firstName lastName class')
+        .populate({
+          path: 'student',
+          select: 'firstName lastName class admissionNumber',
+          populate: { path: 'class', select: 'className' }
+        })
         .sort({ paymentDate: -1 })
         .limit(5)
         .lean(),
       
       FeeCollection.find({ branch: branchId, status: { $in: ['pending', 'partial'] }, balance: { $gt: 0 } })
-        .populate('student', 'firstName lastName class')
+        .populate({
+          path: 'student',
+          select: 'firstName lastName class admissionNumber',
+          populate: { path: 'class', select: 'className' }
+        })
         .sort({ balance: -1 })
         .limit(5)
         .lean(),
@@ -81,13 +90,15 @@ exports.getDashboardSummary = async (req, res) => {
       },
       recentCollections: recentCollections.map(fee => ({
         studentName: fee.student ? `${fee.student.firstName} ${fee.student.lastName}` : 'Unknown',
-        class: fee.student?.class || 'N/A',
+        admissionNumber: fee.student?.admissionNumber || 'N/A',
+        class: fee.student?.class?.className || (typeof fee.student?.class === 'string' ? fee.student?.class : 'N/A'),
         amount: fee.amountPaid,
         date: fee.paymentDate
       })),
       pendingPayments: pendingPayments.map(fee => ({
         studentName: fee.student ? `${fee.student.firstName} ${fee.student.lastName}` : 'Unknown',
-        class: fee.student?.class || 'N/A',
+        admissionNumber: fee.student?.admissionNumber || 'N/A',
+        class: fee.student?.class?.className || (typeof fee.student?.class === 'string' ? fee.student?.class : 'N/A'),
         amount: fee.balance,
         dueDate: fee.createdAt
       }))
@@ -206,6 +217,37 @@ exports.getStudentsWithFeeStatus = async (req, res) => {
         page: parseInt(page),
         limit: parseInt(limit),
         totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Lookup Student by Admission Number
+exports.getStudentLookup = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const admin = await Admin.findById(req.userId).lean();
+    
+    if (!studentId) return res.status(400).json({ message: 'Student ID is required' });
+
+    const student = await Student.findOne({ 
+      admissionNumber: studentId,
+      branch: admin.branch 
+    }).populate('class', 'className').lean();
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: student._id,
+        name: `${student.firstName} ${student.lastName}`,
+        class: student.class?.className || 'N/A',
+        rollNumber: student.rollNumber
       }
     });
   } catch (error) {

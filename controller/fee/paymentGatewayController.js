@@ -138,6 +138,61 @@ exports.verifyPayment = async (req, res) => {
   }
 };
 
+// ─── MANUAL FEE COLLECTION ───────────────────────────────────────────────────
+
+exports.manualCollectFee = async (req, res) => {
+  try {
+    const { studentId, amount, paymentMethod, transactionId, chequeNumber, upiId } = req.body;
+    
+    if (!studentId || !amount) {
+      return errorResponse(res, 'studentId and amount are required', 400);
+    }
+
+    // Find the student's pending fee collection records
+    const feeRecords = await FeeCollection.find({ 
+      student: studentId, 
+      status: { $in: ['pending', 'partial'] },
+      balance: { $gt: 0 }
+    }).sort({ createdAt: 1 });
+
+    if (!feeRecords || feeRecords.length === 0) {
+      return errorResponse(res, 'No pending fees found for this student', 404);
+    }
+
+    let remainingAmount = parseFloat(amount);
+    let totalCollected = 0;
+    const processedRecords = [];
+
+    // Distribute amount over pending records
+    for (const record of feeRecords) {
+      if (remainingAmount <= 0) break;
+
+      const collectAmount = Math.min(record.balance, remainingAmount);
+      
+      record.amountPaid += collectAmount;
+      record.balance -= collectAmount;
+      record.status = record.balance <= 0 ? 'paid' : 'partial';
+      record.paymentDate = new Date();
+      record.paymentMode = paymentMethod;
+      record.transactionId = transactionId || upiId || chequeNumber || `CASH-${Date.now()}`;
+      
+      await record.save();
+      
+      processedRecords.push({ feeId: record._id, collectedAmount: collectAmount });
+      remainingAmount -= collectAmount;
+      totalCollected += collectAmount;
+    }
+
+    return successResponse(res, {
+      studentId,
+      totalCollected,
+      processedRecords
+    }, 'Manual fee collection successful');
+  } catch (error) {
+    return errorResponse(res, 'Server error', 500, error);
+  }
+};
+
 // ─── GET PAYMENT HISTORY ──────────────────────────────────────────────────────
 
 exports.getPaymentHistory = async (req, res) => {
@@ -145,8 +200,7 @@ exports.getPaymentHistory = async (req, res) => {
     const { studentId, startDate, endDate, page = 1, limit = 20 } = req.query;
     
     const query = { 
-      status: { $in: ['paid', 'partial'] },
-      paymentMode: 'online'
+      status: { $in: ['paid', 'partial'] }
     };
     
     if (studentId) query.student = studentId;
@@ -159,9 +213,21 @@ exports.getPaymentHistory = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
+    // If class filter is provided, we need to handle it. 
+    // Since class is inside Student, we might need a more complex query or aggregate if filtering by student.class.className
+    // For now, let's stick to find and we'll filter by className in the pipeline if needed, 
+    // or just fetch all and filter client-side as before but with a more robust 'Fetch' trigger.
+    
+    // Actually, let's try to add a simple regex or match if possible.
+    // Given the current structure, a full aggregate would be better for server-side class filtering.
+
     const [payments, total] = await Promise.all([
       FeeCollection.find(query)
-        .populate('student', 'firstName lastName rollNumber class')
+        .populate({
+          path: 'student',
+          select: 'firstName lastName rollNumber admissionNumber class',
+          populate: { path: 'class', select: 'className' }
+        })
         .sort({ paymentDate: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -171,14 +237,19 @@ exports.getPaymentHistory = async (req, res) => {
 
     return successResponse(res, {
       payments: payments.map(p => ({
-        id: p._id,
-        studentName: `${p.student?.firstName} ${p.student?.lastName}`,
-        rollNumber: p.student?.rollNumber,
-        class: p.student?.class,
+        _id: p._id,
+        studentName: p.student ? `${p.student.firstName} ${p.student.lastName}` : 'Unknown',
+        admissionNumber: p.student?.admissionNumber || 'N/A',
+        rollNumber: p.student?.rollNumber || 'N/A',
+        class: p.student?.class?.className || (typeof p.student?.class === 'string' ? p.student?.class : 'N/A'),
+        studentMobile: p.student?.phone || 'N/A',
         feeType: p.feeType,
         amount: p.amountPaid,
+        totalFee: p.amount,
+        pendingFee: p.balance,
         transactionId: p.transactionId,
         paymentDate: p.paymentDate,
+        paymentMode: p.paymentMode,
         status: p.status
       })),
       pagination: {
@@ -389,8 +460,15 @@ exports.generateReceipt = async (req, res) => {
     const { feeCollectionId } = req.params;
     
     const feeRecord = await FeeCollection.findById(feeCollectionId)
-      .populate('student', 'firstName lastName rollNumber class section')
-      .populate('branch', 'branchName address')
+      .populate({
+        path: 'student',
+        select: 'firstName lastName rollNumber class section admissionNumber guardianInfo',
+        populate: [
+          { path: 'class', select: 'className' },
+          { path: 'section', select: 'sectionName' }
+        ]
+      })
+      .populate('branch', 'branchName address phone email')
       .lean();
 
     if (!feeRecord) return errorResponse(res, 'Fee record not found', 404);
@@ -399,14 +477,18 @@ exports.generateReceipt = async (req, res) => {
       receiptNumber: `REC-${Date.now()}`,
       date: feeRecord.paymentDate,
       student: {
-        name: `${feeRecord.student.firstName} ${feeRecord.student.lastName}`,
-        rollNumber: feeRecord.student.rollNumber,
-        class: feeRecord.student.class,
-        section: feeRecord.student.section
+        name: `${feeRecord.student?.firstName || ''} ${feeRecord.student?.lastName || ''}`,
+        admissionNumber: feeRecord.student?.admissionNumber || 'N/A',
+        rollNumber: feeRecord.student?.rollNumber || 'N/A',
+        parentName: feeRecord.student?.guardianInfo?.fatherName || 'N/A',
+        class: feeRecord.student?.class?.className || 'N/A',
+        section: feeRecord.student?.section?.sectionName || 'N/A'
       },
       branch: {
-        name: feeRecord.branch?.branchName,
-        address: feeRecord.branch?.address
+        name: feeRecord.branch?.branchName || 'School Name',
+        address: feeRecord.branch?.address || 'School Address',
+        phone: feeRecord.branch?.phone || 'N/A',
+        email: feeRecord.branch?.email || 'N/A'
       },
       payment: {
         feeType: feeRecord.feeType,

@@ -22,10 +22,11 @@ exports.getAll = async (req, res) => {
     const admin = await getAdmin(req.userId);
     if (!admin) return res.status(403).json({ message: 'Only library admin can access this' });
 
-    const { subject, class: cls, search } = req.query;
+    const { subject, class: cls, stream, search } = req.query;
     const query = { branch: admin.branch };
     if (subject) query.subject = subject;
     if (cls) query.class = cls;
+    if (stream) query.stream = stream;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -34,6 +35,8 @@ exports.getAll = async (req, res) => {
     }
 
     const books = await DigitalLibrary.find(query)
+      .populate('class', 'className')
+      .populate('branch', 'branchName')
       .select('-createdBy')
       .sort({ createdAt: -1 })
       .lean();
@@ -57,7 +60,7 @@ exports.upload = async (req, res) => {
     const admin = await getAdmin(req.userId);
     if (!admin) return res.status(403).json({ message: 'Only library admin can access this' });
 
-    const { title, subject, class: cls, uploadDate } = req.body;
+    const { title, subject, class: cls, stream, uploadDate } = req.body;
     if (!title || !subject || !cls) {
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'title, subject and class are required' });
@@ -70,7 +73,7 @@ exports.upload = async (req, res) => {
     const fileUrl = `/uploads/digital-library/${req.file.filename}`;
     const fileSize = formatFileSize(req.file.size);
 
-    const book = new DigitalLibrary({
+    const bookData = {
       title, subject, class: cls,
       fileUrl,
       fileName: req.file.originalname,
@@ -79,9 +82,16 @@ exports.upload = async (req, res) => {
       branch: admin.branch,
       client: admin.client,
       createdBy: req.userId
-    });
+    };
 
+    // Only add stream if it's provided and not empty
+    if (stream && stream.trim()) {
+      bookData.stream = stream;
+    }
+
+    const book = new DigitalLibrary(bookData);
     await book.save();
+    await book.populate('class', 'className');
     res.status(201).json({ success: true, message: 'Digital book uploaded successfully', data: book });
   } catch (error) {
     if (req.file) fs.unlinkSync(req.file.path);
@@ -99,11 +109,18 @@ exports.update = async (req, res) => {
     if (!book) return res.status(404).json({ message: 'Digital book not found' });
     if (book.branch.toString() !== admin.branch.toString()) return res.status(403).json({ message: 'Access denied' });
 
-    const { title, subject, class: cls, uploadDate } = req.body;
+    const { title, subject, class: cls, stream, uploadDate } = req.body;
     if (title) book.title = title;
     if (subject) book.subject = subject;
     if (cls) book.class = cls;
     if (uploadDate) book.uploadDate = new Date(uploadDate);
+    
+    // Only update stream if it's provided and not empty
+    if (stream && stream.trim()) {
+      book.stream = stream;
+    } else if (stream === '') {
+      book.stream = null;
+    }
 
     // If new file uploaded, replace old
     if (req.file) {
@@ -115,6 +132,7 @@ exports.update = async (req, res) => {
     }
 
     await book.save();
+    await book.populate('class', 'className');
     res.status(200).json({ success: true, message: 'Digital book updated successfully', data: book });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

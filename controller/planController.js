@@ -42,6 +42,11 @@ exports.createPlan = async (req, res) => {
     await plan.save();
     res.status(201).json({ message: 'Plan created successfully', plan });
   } catch (error) {
+    console.error('Plan create error:', error.message, error.errors);
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ message: 'Validation failed', errors: messages });
+    }
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

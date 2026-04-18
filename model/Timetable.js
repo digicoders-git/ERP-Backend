@@ -15,6 +15,7 @@ const timetableSchema = new mongoose.Schema({
   classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
   sectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
   teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  teacherName: { type: String, trim: true },     // stored name directly for easy display
   branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
   client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }
@@ -22,5 +23,6 @@ const timetableSchema = new mongoose.Schema({
 
 timetableSchema.index({ branch: 1, day: 1 });
 timetableSchema.index({ branch: 1, teacherId: 1, day: 1 });
-
+timetableSchema.index({ branch: 1, classId: 1, sectionId: 1 });
+timetableSchema.index({ classId: 1, sectionId: 1, day: 1 });
 module.exports = mongoose.model('Timetable', timetableSchema);

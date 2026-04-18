@@ -1,31 +1,41 @@
 const Notice = require('../../model/Notice');
-const Admin = require('../../model/Admin');
+const Staff = require('../../model/Staff');
 
 // Create Notice
 exports.createNotice = async (req, res) => {
   try {
-    const { title, content, priority, type, class: className, publishDate, expiryDate } = req.body;
-    const adminId = req.userId;
+    const { title, content, priority, type, class: className, publishDate, expiryDate, targetAudience } = req.body;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can create notices' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const attachments = req.files ? req.files.map(file => file.path) : [];
+    
+    let finalAudience = ['student'];
+    if (targetAudience) {
+      try {
+        finalAudience = typeof targetAudience === 'string' ? JSON.parse(targetAudience) : targetAudience;
+      } catch (e) {
+        finalAudience = [targetAudience];
+      }
+    }
 
     const newNotice = new Notice({
       title,
       content,
       type,
+      targetAudience: finalAudience,
       class: className,
       publishDate,
       expiryDate,
       attachments,
       priority: priority || 'normal',
-      branch: admin.branch,
-      client: admin.client,
-      createdBy: adminId
+      branch: staff.branch,
+      client: staff.client,
+      createdBy: staffId
     });
 
     await newNotice.save();
@@ -40,14 +50,14 @@ exports.getAllNotices = async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '', priority = '' } = req.query;
     const skip = (page - 1) * limit;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can view notices' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
-    const searchQuery = { branch: admin.branch };
+    const searchQuery = { branch: staff.branch };
 
     if (search) {
       searchQuery.$or = [
@@ -61,7 +71,7 @@ exports.getAllNotices = async (req, res) => {
     }
 
     const notices = await Notice.find(searchQuery)
-      .populate('createdBy', 'email role')
+      .populate('createdBy', 'email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -86,22 +96,22 @@ exports.getAllNotices = async (req, res) => {
 exports.getNoticeById = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can view notice details' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const notice = await Notice.findById(id)
       .populate('branch', 'branchName branchCode')
-      .populate('createdBy', 'email role');
+      .populate('createdBy', 'email');
 
     if (!notice) {
       return res.status(404).json({ message: 'Notice not found' });
     }
 
-    if (notice.branch._id.toString() !== admin.branch.toString()) {
+    if (notice.branch._id.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -116,11 +126,11 @@ exports.updateNotice = async (req, res) => {
   try {
     const { id } = req.params;
     const { title, content, priority } = req.body;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can update notices' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const notice = await Notice.findById(id);
@@ -128,11 +138,11 @@ exports.updateNotice = async (req, res) => {
       return res.status(404).json({ message: 'Notice not found' });
     }
 
-    if (notice.branch.toString() !== admin.branch.toString()) {
+    if (notice.branch.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (notice.createdBy.toString() !== adminId) {
+    if (notice.createdBy.toString() !== staffId) {
       return res.status(403).json({ message: 'You can only update your own notices' });
     }
 
@@ -141,8 +151,8 @@ exports.updateNotice = async (req, res) => {
     if (priority) notice.priority = priority;
 
     if (req.files && req.files.length > 0) {
-      const newDocuments = req.files.map(file => file.path);
-      notice.documents = [...notice.documents, ...newDocuments];
+      const newAttachments = req.files.map(file => file.path);
+      notice.attachments = [...(notice.attachments || []), ...newAttachments];
     }
 
     await notice.save();
@@ -156,11 +166,11 @@ exports.updateNotice = async (req, res) => {
 exports.deleteNotice = async (req, res) => {
   try {
     const { id } = req.params;
-    const adminId = req.userId;
+    const staffId = req.userId;
 
-    const admin = await Admin.findById(adminId);
-    if (!admin || admin.role !== 'staffAdmin') {
-      return res.status(403).json({ message: 'Only staff can delete notices' });
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(403).json({ message: 'Staff not found' });
     }
 
     const notice = await Notice.findById(id);
@@ -168,11 +178,11 @@ exports.deleteNotice = async (req, res) => {
       return res.status(404).json({ message: 'Notice not found' });
     }
 
-    if (notice.branch.toString() !== admin.branch.toString()) {
+    if (notice.branch.toString() !== staff.branch.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    if (notice.createdBy.toString() !== adminId) {
+    if (notice.createdBy.toString() !== staffId) {
       return res.status(403).json({ message: 'You can only delete your own notices' });
     }
 

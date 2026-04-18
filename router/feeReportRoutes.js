@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const feeReportController = require('../controller/feeReportController');
-const auth = require('../middleware/auth');
+const flexibleAuth = require('../middleware/flexibleAuth');
 
-router.get('/summary', auth, feeReportController.getFeeReport);
-router.get('/stats', auth, feeReportController.getFeeCollectionStats);
+router.get('/summary', flexibleAuth, feeReportController.getFeeReport);
+router.get('/stats', flexibleAuth, feeReportController.getFeeCollectionStats);
 
 module.exports = router;

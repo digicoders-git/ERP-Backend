@@ -2,6 +2,7 @@ const Driver = require('../../model/Driver');
 const DriverSalary = require('../../model/DriverSalary');
 const DriverDocument = require('../../model/DriverDocument');
 const Admin = require('../../model/Admin');
+const Staff = require('../../model/Staff');
 
 const getDriver = async (driverId) =>  {
   const driver = await Driver.findById(driverId).lean();
@@ -46,11 +47,11 @@ exports.getSalaryInfo = async (req, res) => {
   }
 };
 
-// Admin — add/update driver salary
+// Admin/Staff — add/update driver salary
 exports.upsertSalary = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.userId).lean();
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    // flexibleAuth already verified user; req.user has role & branch
+    if (!req.user) return res.status(403).json({ message: 'Access denied' });
 
     const { driverId, month, baseSalary, allowances = 0, deductions = 0, status, paymentDate } = req.body;
     if (!driverId || !month || !baseSalary) {
@@ -60,7 +61,10 @@ exports.upsertSalary = async (req, res) => {
     const driver = await Driver.findById(driverId).lean();
     if (!driver) return res.status(404).json({ message: 'Driver not found' });
 
-    const netSalary = baseSalary + allowances - deductions;
+    const b = Number(baseSalary) || 0;
+    const a = Number(allowances) || 0;
+    const d = Number(deductions) || 0;
+    const netSalary = b + a - d;
 
     const salary = await DriverSalary.findOneAndUpdate(
       { driver: driverId, month },
@@ -74,14 +78,15 @@ exports.upsertSalary = async (req, res) => {
   }
 };
 
-// Admin — get all driver salaries for branch
+// Admin/Staff — get all driver salaries for branch
 exports.getAllDriverSalaries = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.userId).lean();
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    // flexibleAuth sets req.user with branch info
+    if (!req.user) return res.status(403).json({ message: 'Access denied' });
 
     const { month, status } = req.query;
-    const query = { branch: admin.branch };
+    const query = {};
+    if (req.user.branch) query.branch = req.user.branch;
     if (month) query.month = month;
     if (status) query.status = status;
 
@@ -90,6 +95,20 @@ exports.getAllDriverSalaries = async (req, res) => {
       .sort({ createdAt: -1 }).lean();
 
     res.status(200).json({ success: true, data: salaries });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Admin/Staff — delete driver salary
+exports.deleteSalary = async (req, res) => {
+  try {
+    if (!req.user) return res.status(403).json({ message: 'Access denied' });
+
+    const salary = await DriverSalary.findByIdAndDelete(req.params.id);
+    if (!salary) return res.status(404).json({ message: 'Salary record not found' });
+
+    res.status(200).json({ success: true, message: 'Salary deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

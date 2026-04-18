@@ -7,8 +7,39 @@ exports.getAll = async (req, res) => {
     const filter = {};
     if (status) filter.status = status;
     if (requestType) filter.requestType = requestType;
+
+    const HostelStudent = require('../../model/HostelStudent');
+    const Student = require('../../model/Student');
+
+    const BedAllocation = require('../../model/BedAllocation');
     const requests = await LeaveGatePass.find(filter).sort({ createdAt: -1 }).lean();
-    return successResponse(res, requests, 'Requests fetched');
+
+    // Self-healing: Populate latest student info for each request
+    const enrichedRequests = await Promise.all(requests.map(async (item) => {
+      // 1. Try Hostel Database
+      let student = await HostelStudent.findById(item.studentId).lean();
+      
+      // 2. Try Main School Database (Legacy)
+      if (!student) {
+        student = await Student.findById(item.studentId).lean();
+      }
+
+      // 3. Fetch current room/bed
+      const allotment = await BedAllocation.findOne({ studentId: item.studentId }).lean();
+
+      const currentName = student ? (student.name || `${student.firstName} ${student.lastName}`) : item.studentName;
+      const rollNumber = student ? (student.rollNumber || student.rollNo || 'N/A') : 'N/A';
+
+      return {
+        ...item,
+        studentName: currentName,
+        rollNumber: rollNumber,
+        roomNumber: allotment ? allotment.roomNumber : 'N/A',
+        bedNumber: allotment ? allotment.bedNumber : 'A'
+      };
+    }));
+
+    return successResponse(res, enrichedRequests, 'Requests fetched with fresh data');
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }
@@ -34,37 +65,38 @@ exports.update = async (req, res) => {
   }
 };
 
-exports.approve = async (req, res) => {
+exports.updateStatus = async (req, res) => {
   try {
-    const request = await LeaveGatePass.findByIdAndUpdate(
-      req.params.id,
-      { status: 'approved', approvedBy: req.body.approvedBy || 'Warden', approvalDate: new Date().toISOString().split('T')[0] },
-      { new: true }
-    );
+    const { status, rejectionReason } = req.body;
+    if (!['approved', 'rejected', 'pending'].includes(status)) {
+      return errorResponse(res, 'Invalid status', 400);
+    }
+
+    const updateData = {
+      status,
+      approvedBy: 'Warden',
+      approvalDate: new Date().toISOString().split('T')[0]
+    };
+
+    if (rejectionReason) updateData.rejectionReason = rejectionReason;
+
+    const request = await LeaveGatePass.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!request) return errorResponse(res, 'Not found', 404);
-    return successResponse(res, request, 'Approved');
+    
+    return successResponse(res, request, `Pass ${status.charAt(0).toUpperCase() + status.slice(1)}`);
   } catch (error) {
     return errorResponse(res, 'Server error', 500, error);
   }
 };
 
+exports.approve = async (req, res) => {
+  req.body.status = 'approved';
+  return exports.updateStatus(req, res);
+};
+
 exports.reject = async (req, res) => {
-  try {
-    const request = await LeaveGatePass.findByIdAndUpdate(
-      req.params.id,
-      {
-        status: 'rejected',
-        rejectionReason: req.body.rejectionReason,
-        approvedBy: req.body.approvedBy || 'Warden',
-        approvalDate: new Date().toISOString().split('T')[0]
-      },
-      { new: true }
-    );
-    if (!request) return errorResponse(res, 'Not found', 404);
-    return successResponse(res, request, 'Rejected');
-  } catch (error) {
-    return errorResponse(res, 'Server error', 500, error);
-  }
+  req.body.status = 'rejected';
+  return exports.updateStatus(req, res);
 };
 
 exports.remove = async (req, res) => {

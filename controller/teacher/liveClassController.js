@@ -4,7 +4,7 @@ const Admin = require('../../model/Admin');
 // Schedule Live Class
 exports.scheduleLiveClass = async (req, res) => {
   try {
-    const { title, subject, meetLink, date } = req.body;
+    const { title, subject, meetLink, date, duration, description, classId, sectionId } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
@@ -17,6 +17,10 @@ exports.scheduleLiveClass = async (req, res) => {
       subject,
       meetLink,
       date,
+      duration,
+      description,
+      class: classId,
+      section: sectionId,
       branch: admin.branch,
       client: admin.client,
       createdBy: adminId
@@ -32,7 +36,7 @@ exports.scheduleLiveClass = async (req, res) => {
 // Get All Live Classes
 exports.getAllLiveClasses = async (req, res) => {
   try {
-    const { page = 1, limit = 10, subject } = req.query;
+    const { page = 1, limit = 10, subject, classId, sectionId } = req.query;
     const skip = (page - 1) * limit;
     const adminId = req.userId;
 
@@ -43,9 +47,13 @@ exports.getAllLiveClasses = async (req, res) => {
 
     const searchQuery = { branch: admin.branch };
     if (subject) searchQuery.subject = { $regex: subject, $options: 'i' };
+    if (classId) searchQuery.class = classId;
+    if (sectionId) searchQuery.section = sectionId;
 
     const liveClasses = await LiveClass.find(searchQuery)
       .populate('createdBy', 'email role')
+      .populate('class', 'className')
+      .populate('section', 'sectionName')
       .sort({ date: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -99,7 +107,7 @@ exports.getLiveClassById = async (req, res) => {
 exports.updateLiveClass = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, subject, meetLink, date } = req.body;
+    const { title, subject, meetLink, date, duration, description, classId, sectionId, status } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId).lean();
@@ -120,6 +128,11 @@ exports.updateLiveClass = async (req, res) => {
     if (subject) liveClass.subject = subject;
     if (meetLink) liveClass.meetLink = meetLink;
     if (date) liveClass.date = date;
+    if (duration) liveClass.duration = duration;
+    if (description) liveClass.description = description;
+    if (classId) liveClass.class = classId;
+    if (sectionId) liveClass.section = sectionId;
+    if (status) liveClass.status = status;
 
     await liveClass.save();
     res.status(200).json({ message: 'Live class updated successfully', liveClass });

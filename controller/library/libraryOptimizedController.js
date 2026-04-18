@@ -5,50 +5,33 @@ const LibraryStudent = require('../../model/LibraryStudent');
 const mongoose = require('mongoose');
 
 const getBranch = (req) => req.user?.branch;
+const getClient = (req) => req.user?.client;
+
+const getMatchQuery = (req) => {
+  const branch = getBranch(req);
+  const client = getClient(req);
+  if (branch) return { branch: new mongoose.Types.ObjectId(branch) };
+  if (client) return { client: new mongoose.Types.ObjectId(client) };
+  return {};
+};
 
 // Dashboard — single call, all stats
 exports.getLibraryDashboard = async (req, res) => {
   try {
     const branch = getBranch(req);
+    const matchQ = getMatchQuery(req);
 
-    // Auto-mark overdue
     await BookIssue.updateMany(
-      { branch, status: 'issued', dueDate: { $lt: new Date() } },
+      { ...matchQ, status: 'issued', dueDate: { $lt: new Date() } },
       { $set: { status: 'overdue' } }
     );
 
     const [bookStats, issueStats, memberCount, studentCount, recentIssues] = await Promise.all([
-      Book.aggregate([
-        { $match: { branch: new mongoose.Types.ObjectId(branch) } },
-        {
-          $group: {
-            _id: null,
-            totalBooks: { $sum: 1 },
-            totalCopies: { $sum: '$totalCopies' },
-            availableCopies: { $sum: '$availableCopies' },
-            issuedCopies: { $sum: '$issuedCopies' }
-          }
-        }
-      ]),
-      BookIssue.aggregate([
-        { $match: { branch: new mongoose.Types.ObjectId(branch) } },
-        {
-          $facet: {
-            issued: [{ $match: { status: 'issued' } }, { $count: 'count' }],
-            returned: [{ $match: { status: 'returned' } }, { $count: 'count' }],
-            overdue: [{ $match: { status: 'overdue' } }, { $count: 'count' }],
-            totalFine: [{ $group: { _id: null, total: { $sum: '$fine' } } }]
-          }
-        }
-      ]),
-      LibraryMember.countDocuments({ branch }),
-      LibraryStudent.countDocuments({ branch }),
-      BookIssue.find({ branch, status: { $in: ['issued', 'overdue'] } })
-        .populate('book', 'title author')
-        .populate('member', 'name memberId')
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .lean()
+      Book.aggregate([{ $match: matchQ }, { $group: { _id: null, totalBooks: { $sum: 1 }, totalCopies: { $sum: '$totalCopies' }, availableCopies: { $sum: '$availableCopies' }, issuedCopies: { $sum: '$issuedCopies' } } }]),
+      BookIssue.aggregate([{ $match: matchQ }, { $facet: { issued: [{ $match: { status: 'issued' } }, { $count: 'count' }], returned: [{ $match: { status: 'returned' } }, { $count: 'count' }], overdue: [{ $match: { status: 'overdue' } }, { $count: 'count' }], totalFine: [{ $group: { _id: null, total: { $sum: '$fine' } } }] } }]),
+      LibraryMember.countDocuments(matchQ),
+      LibraryStudent.countDocuments(matchQ),
+      BookIssue.find({ ...matchQ, status: { $in: ['issued', 'overdue'] } }).populate('book', 'title author').populate('member', 'name memberId').sort({ createdAt: -1 }).limit(5).lean()
     ]);
 
     const b = bookStats[0] || {};
@@ -140,16 +123,12 @@ exports.getLibraryStats = async (req, res) => {
 // Overdue books — for DueDateAlerts page
 exports.getOverdueBooks = async (req, res) => {
   try {
-    const branch = getBranch(req);
+    const matchQ = getMatchQuery(req);
     const now = new Date();
 
-    // Auto-mark overdue first
-    await BookIssue.updateMany(
-      { branch, status: 'issued', dueDate: { $lt: now } },
-      { $set: { status: 'overdue' } }
-    );
+    await BookIssue.updateMany({ ...matchQ, status: 'issued', dueDate: { $lt: now } }, { $set: { status: 'overdue' } });
 
-    const overdue = await BookIssue.find({ branch, status: 'overdue' })
+    const overdue = await BookIssue.find({ ...matchQ, status: 'overdue' })
       .populate('book', 'title author')
       .populate('member', 'name email memberId')
       .sort({ dueDate: 1 })
@@ -208,19 +187,19 @@ exports.extendDueDate = async (req, res) => {
 // All issued books list
 exports.getIssuedBooks = async (req, res) => {
   try {
-    const branch = getBranch(req);
+    const matchQ = getMatchQuery(req);
     const { limit = 20, page = 1 } = req.query;
     const skip = (page - 1) * limit;
 
     const [issued, total] = await Promise.all([
-      BookIssue.find({ branch, status: { $in: ['issued', 'overdue'] } })
+      BookIssue.find({ ...matchQ, status: { $in: ['issued', 'overdue'] } })
         .populate('book', 'title author ISBN barcode')
         .populate('member', 'name email memberId')
         .sort({ issueDate: -1 })
         .skip(skip)
         .limit(parseInt(limit))
         .lean(),
-      BookIssue.countDocuments({ branch, status: { $in: ['issued', 'overdue'] } })
+      BookIssue.countDocuments({ ...matchQ, status: { $in: ['issued', 'overdue'] } })
     ]);
 
     res.status(200).json({
@@ -236,18 +215,17 @@ exports.getIssuedBooks = async (req, res) => {
 // Books list (optimized for admin panel)
 exports.getBooks = async (req, res) => {
   try {
-    const branch = getBranch(req);
+    const matchQ = getMatchQuery(req);
     const { page = 1, limit = 20, search = '', category } = req.query;
     const skip = (page - 1) * limit;
 
-    const query = { branch };
+    const query = { ...matchQ };
     if (category) query.category = category;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
         { author: { $regex: search, $options: 'i' } },
         { ISBN: { $regex: search, $options: 'i' } },
-        { barcode: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -274,11 +252,11 @@ exports.getBooks = async (req, res) => {
 // Members list (optimized)
 exports.getMembers = async (req, res) => {
   try {
-    const branch = getBranch(req);
+    const matchQ = getMatchQuery(req);
     const { page = 1, limit = 20, search = '' } = req.query;
     const skip = (page - 1) * limit;
 
-    const query = { branch };
+    const query = { ...matchQ };
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },

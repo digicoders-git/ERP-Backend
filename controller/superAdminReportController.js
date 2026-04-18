@@ -33,7 +33,7 @@ exports.getClientsReport = async (req, res) => {
       .sort({ createdAt: -1 });
 
     // Calculate statistics
-    const totalClients = clients.length;
+    const totalClients = clients.length || 0;
     const totalStudents = clients.reduce((sum, client) => sum + (client.students || 0), 0);
     const totalBranches = clients.reduce((sum, client) => sum + (client.currentBranchCount || 0), 0);
     const averageRating = clients.length > 0 
@@ -41,16 +41,22 @@ exports.getClientsReport = async (req, res) => {
       : 0;
 
     res.status(200).json({
+      success: true,
       summary: {
         totalClients,
         totalStudents,
         totalBranches,
         averageRating
       },
-      clients
+      clients: clients || []
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Clients report error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };
 
@@ -58,8 +64,9 @@ exports.getClientsReport = async (req, res) => {
 exports.getPlansReport = async (req, res) => {
   try {
     const plans = await Plan.find().sort({ createdAt: -1 });
+    const Student = require('../model/Student');
 
-    // Get client count for each plan
+    // Get client count and student count for each plan
     const plansWithStats = await Promise.all(
       plans.map(async (plan) => {
         const clientCount = await Client.countDocuments({ plan: plan._id });
@@ -68,21 +75,33 @@ exports.getPlansReport = async (req, res) => {
           status: 'active' 
         });
         
+        // Get total students for this plan
+        const clients = await Client.find({ plan: plan._id }, '_id');
+        const clientIds = clients.map(c => c._id);
+        const totalStudents = await Student.countDocuments({ client: { $in: clientIds } });
+        
         return {
           ...plan.toObject(),
-          clientCount,
-          activeClientCount
+          clientCount: clientCount || 0,
+          activeClientCount: activeClientCount || 0,
+          totalStudents: totalStudents || 0
         };
       })
     );
 
     res.status(200).json({
-      totalPlans: plans.length,
-      activePlans: plans.filter(p => p.status).length,
-      plans: plansWithStats
+      success: true,
+      totalPlans: plans.length || 0,
+      activePlans: plans.filter(p => p.status).length || 0,
+      plans: plansWithStats || []
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Plans report error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };
 
@@ -109,11 +128,11 @@ exports.getRevenueReport = async (req, res) => {
         let revenue = 0;
         
         if (client.plan.planType === 'Per Student Basis') {
-          revenue = client.students * client.plan.pricePerStudent;
+          revenue = (client.students || 0) * (client.plan.pricePerStudent || 0);
         } else if (client.plan.planType === 'Monthly Fixed Price') {
-          revenue = client.plan.monthlyPrice;
+          revenue = client.plan.monthlyPrice || 0;
         } else if (client.plan.planType === 'Yearly Fixed Price') {
-          revenue = client.plan.yearlyPrice;
+          revenue = client.plan.yearlyPrice || 0;
         }
 
         totalRevenue += revenue;
@@ -133,78 +152,84 @@ exports.getRevenueReport = async (req, res) => {
     });
 
     res.status(200).json({
-      totalRevenue,
-      totalClients: clients.length,
-      revenueByPlan: Object.values(revenueByPlan)
+      success: true,
+      totalRevenue: totalRevenue || 0,
+      totalClients: clients.length || 0,
+      revenueByPlan: Object.values(revenueByPlan) || []
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Revenue report error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };
 
 // Get System Overview Report
 exports.getSystemOverview = async (req, res) => {
   try {
+    const Student = require('../model/Student');
+    
     const [
       totalClients,
       activeClients,
       totalPlans,
       totalBranches,
       totalAdmins,
-      clientsByPlan,
-      recentActivity
+      recentClients
     ] = await Promise.all([
       Client.countDocuments(),
       Client.countDocuments({ status: 'active' }),
       Plan.countDocuments(),
       Branch.countDocuments(),
       Admin.countDocuments(),
-      Client.aggregate([
-        {
-          $lookup: {
-            from: 'plans',
-            localField: 'plan',
-            foreignField: '_id',
-            as: 'planDetails'
-          }
-        },
-        {
-          $unwind: '$planDetails'
-        },
-        {
-          $group: {
-            _id: '$planDetails.planName',
-            count: { $sum: 1 },
-            totalStudents: { $sum: '$students' }
-          }
-        }
-      ]),
       Client.find()
         .sort({ createdAt: -1 })
         .limit(10)
         .populate('plan', 'planName')
-        .select('name createdAt status students')
+        .select('_id name createdAt status plan students')
     ]);
 
-    // Get total students
-    const clientsWithStudents = await Client.find({}, 'students');
-    const totalStudents = clientsWithStudents.reduce((sum, client) => sum + (client.students || 0), 0);
+    // Get actual student counts for each recent client
+    const recentActivityWithCounts = await Promise.all(
+      recentClients.map(async (client) => {
+        const studentCount = await Student.countDocuments({ client: client._id });
+        const clientStudentCount = client.students || 0;
+        const finalCount = studentCount > 0 ? studentCount : clientStudentCount;
+        return {
+          ...client.toObject(),
+          students: finalCount
+        };
+      })
+    );
+
+    // Get total students across all clients
+    const allClients = await Client.find({}, '_id');
+    const clientIds = allClients.map(c => c._id);
+    const totalStudents = await Student.countDocuments({ client: { $in: clientIds } });
 
     res.status(200).json({
+      success: true,
       overview: {
-        totalClients,
-        activeClients,
-        inactiveClients: totalClients - activeClients,
-        totalPlans,
-        totalBranches,
-        totalAdmins,
-        totalStudents
+        totalClients: totalClients || 0,
+        activeClients: activeClients || 0,
+        inactiveClients: (totalClients - activeClients) || 0,
+        totalPlans: totalPlans || 0,
+        totalBranches: totalBranches || 0,
+        totalAdmins: totalAdmins || 0,
+        totalStudents: totalStudents || 0
       },
-      clientsByPlan,
-      recentActivity
+      recentActivity: recentActivityWithCounts || []
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('System overview error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };
 
@@ -233,7 +258,7 @@ exports.getGrowthAnalytics = async (req, res) => {
         $group: {
           _id: groupBy,
           count: { $sum: 1 },
-          totalStudents: { $sum: '$students' }
+          totalStudents: { $sum: { $ifNull: ['$students', 0] } }
         }
       },
       { $sort: { _id: 1 } }
@@ -250,11 +275,17 @@ exports.getGrowthAnalytics = async (req, res) => {
     ]);
 
     res.status(200).json({
+      success: true,
       period,
-      clientGrowth,
-      branchGrowth
+      clientGrowth: clientGrowth || [],
+      branchGrowth: branchGrowth || []
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Growth analytics error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error', 
+      error: error.message 
+    });
   }
 };

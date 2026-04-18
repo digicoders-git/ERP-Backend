@@ -1,7 +1,7 @@
 const Warden = require('../../model/Warden');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { successResponse,  errorResponse } = require('../../responseFormatter');
+const { successResponse, errorResponse } = require('../../responseFormatter');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRES = '7d';
@@ -42,6 +42,33 @@ exports.getProfile = async (req, res) => {
     if (!warden) return errorResponse(res, 'Warden not found', 404);
     return successResponse(res, warden, 'Profile fetched');
   } catch (error) {
+    return errorResponse(res, 'Server error', 500, error);
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { wardenName, mobileNumber, gender, shift } = req.body;
+    const updateData = {};
+    if (wardenName) updateData.wardenName = wardenName;
+    if (mobileNumber) updateData.mobileNumber = mobileNumber;
+    if (gender) updateData.gender = gender;
+    if (shift) updateData.shift = shift;
+    
+    if (req.file) {
+      updateData.profileImage = `/uploads/warden/profile/${req.file.filename}`;
+    }
+
+    const warden = await Warden.findByIdAndUpdate(req.userId, updateData, { new: true })
+      .select('-password')
+      .populate('assignedHostel', 'hostelName hostelCode')
+      .populate('branch', 'branchName')
+      .lean();
+
+    if (!warden) return errorResponse(res, 'Warden not found', 404);
+    return successResponse(res, warden, 'Profile updated successfully');
+  } catch (error) {
+    console.error('Update Profile Error:', error);
     return errorResponse(res, 'Server error', 500, error);
   }
 };
