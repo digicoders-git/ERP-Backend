@@ -1,6 +1,7 @@
 const Teacher = require('../../model/Teacher');
 const Admin = require('../../model/Admin');
 const Staff = require('../../model/Staff');
+const IDCard = require('../../model/IDCard');
 const { successResponse, errorResponse } = require('../../responseFormatter');
 const path = require('path');
 const fs = require('fs');
@@ -99,12 +100,17 @@ exports.createTeacher = async (req, res) => {
     const admin = await getBranchClient(req.userId);
     if (!admin) return errorResponse(res, 'Admin not found', 404);
 
+    let processedSubjects = subjects;
+    if (typeof subjects === 'string') {
+      try { processedSubjects = JSON.parse(subjects); } catch (e) { processedSubjects = [subjects]; }
+    }
+
     const teacher = new Teacher({
       name,
       email,
       mobile,
       profileImage: req.file ? (req.file.cloudinaryUrl || `/uploads/teacher/profile/${req.file.filename}`) : null,
-      subjects: subjects || [],
+      subjects: processedSubjects || [],
       qualification: qualification || '',
       experience: experience || '',
       salary: salary || 0,
@@ -114,12 +120,60 @@ exports.createTeacher = async (req, res) => {
       createdBy: req.userId,
       status: status !== undefined ? status : true,
       assignedClass: assignedClass || null,
-      assignedSection: assignedSection || null
+      assignedSection: assignedSection || null,
+      isClassTeacher: String(req.body.isClassTeacher) === 'true'
     });
+
+    console.log('--- CREATING TEACHER ---');
+    console.log('Body:', req.body);
+    console.log('isClassTeacher from body:', req.body.isClassTeacher);
+    console.log('isClassTeacher processed:', teacher.isClassTeacher);
+
+    if (teacher.isClassTeacher && teacher.assignedClass && teacher.assignedSection) {
+      const existingClassTeacher = await Teacher.findOne({
+        branch: admin.branch,
+        assignedClass: teacher.assignedClass,
+        assignedSection: teacher.assignedSection,
+        isClassTeacher: true
+      });
+
+      if (existingClassTeacher) {
+        if (req.body.forceReplace !== 'true' && req.body.forceReplace !== true) {
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            message: `Class already has a Class Teacher: ${existingClassTeacher.name}. Do you want to replace?`
+          });
+        } else {
+          existingClassTeacher.isClassTeacher = false;
+          await existingClassTeacher.save();
+        }
+      }
+    }
 
     await teacher.save();
 
-    // Create Teacher Admin
+    // Generate ID Card
+    const cardNumber = `TCH-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const idCard = new IDCard({
+      roleType: 'teacher',
+      teacherId: teacher._id,
+      cardNumber,
+      name: teacher.name,
+      email: teacher.email,
+      mobile: teacher.mobile,
+      profileImage: teacher.profileImage,
+      teacherInfo: {
+        subject: teacher.subjects?.join(', ') || 'N/A',
+        qualification: teacher.qualification || 'N/A'
+      },
+      issueDate: new Date(),
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      status: 'active',
+      client: admin.client,
+      branch: admin.branch
+    });
+    await idCard.save();
     const teacherAdmin = new Admin({
       email,
       password,
@@ -167,16 +221,54 @@ exports.updateTeacher = async (req, res) => {
 
     if (name) teacher.name = name;
     if (mobile) teacher.mobile = mobile;
-    if (subjects) teacher.subjects = subjects;
+    
+    if (subjects) {
+      let processedSubjects = subjects;
+      if (typeof subjects === 'string') {
+        try { processedSubjects = JSON.parse(subjects); } catch (e) { processedSubjects = [subjects]; }
+      }
+      teacher.subjects = processedSubjects;
+    }
+
     if (qualification) teacher.qualification = qualification;
     if (experience) teacher.experience = experience;
     if (salary !== undefined) teacher.salary = salary;
     if (address) teacher.address = address;
     if (status !== undefined) teacher.status = status;
 
+    const assignedClass = req.body.assignedClass || teacher.assignedClass;
+    const assignedSection = req.body.assignedSection || teacher.assignedSection;
+    const isClassTeacher = req.body.isClassTeacher !== undefined ? (String(req.body.isClassTeacher) === 'true') : teacher.isClassTeacher;
+
+    if (isClassTeacher && assignedClass && assignedSection) {
+      const existingClassTeacher = await Teacher.findOne({
+        branch: teacher.branch,
+        assignedClass,
+        assignedSection,
+        isClassTeacher: true,
+        _id: { $ne: teacher._id }
+      });
+
+      if (existingClassTeacher) {
+        if (req.body.forceReplace !== 'true' && req.body.forceReplace !== true) {
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            message: `Class already has a Class Teacher: ${existingClassTeacher.name}. Do you want to replace?`
+          });
+        } else {
+          existingClassTeacher.isClassTeacher = false;
+          await existingClassTeacher.save();
+        }
+      }
+    }
+
+    if (req.body.assignedClass !== undefined) teacher.assignedClass = req.body.assignedClass || null;
+    if (req.body.assignedSection !== undefined) teacher.assignedSection = req.body.assignedSection || null;
+    teacher.isClassTeacher = isClassTeacher;
+
     // Handle profile image update
     if (req.file) {
-      // Delete old photo if it's local
       if (teacher.profileImage && !teacher.profileImage.startsWith('http')) {
         const oldPath = path.join(__dirname, '../../', teacher.profileImage.replace(/^\//, ''));
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
@@ -184,7 +276,12 @@ exports.updateTeacher = async (req, res) => {
       teacher.profileImage = req.file.cloudinaryUrl || `/uploads/teacher/profile/${req.file.filename}`;
     }
 
+    fs.appendFileSync('teacher_logs.txt', `\n--- UPDATE --- \nID: ${req.params.id}\nBody: ${JSON.stringify(req.body)}\nProcessed isClassTeacher: ${isClassTeacher}\n`);
+
     await teacher.save();
+    
+    const verifiedTeacher = await Teacher.findById(teacher._id);
+    fs.appendFileSync('teacher_logs.txt', `Verified in DB after save: ${verifiedTeacher.isClassTeacher}\n`);
 
     // Update teacher admin password if provided
     if (password) {

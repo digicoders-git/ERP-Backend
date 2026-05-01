@@ -235,7 +235,9 @@ exports.changePassword = async (req, res) => {
 // Create Teacher
 exports.createTeacher = async (req, res) => {
   try {
-    const { name, email, mobile, password, subjects, qualification, experience, salary, address, assignedClass, assignedSection } = req.body;
+    const { name, email, mobile, password, subjects, qualification, experience, salary, address, assignedClass, assignedSection, isClassTeacher, teachingAssignments } = req.body;
+    const forceReplace = String(req.body.forceReplace) === 'true';
+    const classTeacherFlag = String(isClassTeacher) === 'true';
     console.log(`Creating teacher ${name} with email ${email}`);
 
     if (!name || !email || !mobile || !password) {
@@ -274,6 +276,11 @@ exports.createTeacher = async (req, res) => {
       subjectsArray = typeof subjects === 'string' ? JSON.parse(subjects) : subjects;
     }
 
+    let teachingAssignmentsArray = [];
+    if (teachingAssignments) {
+      teachingAssignmentsArray = typeof teachingAssignments === 'string' ? JSON.parse(teachingAssignments) : teachingAssignments;
+    }
+
     const teacher = new Teacher({
       customId: generateRandomId(),
       name,
@@ -290,8 +297,33 @@ exports.createTeacher = async (req, res) => {
       createdBy: req.userId,
       status: true,
       assignedClass: assignedClass || null,
-      assignedSection: assignedSection || null
+      assignedSection: assignedSection || null,
+      isClassTeacher: classTeacherFlag,
+      teachingAssignments: teachingAssignmentsArray
     });
+
+    if (classTeacherFlag && teacher.assignedClass && teacher.assignedSection) {
+      const existingClassTeacher = await Teacher.findOne({
+        branch: branchAdmin.branch._id,
+        assignedClass: teacher.assignedClass,
+        assignedSection: teacher.assignedSection,
+        isClassTeacher: true
+      });
+
+      if (existingClassTeacher) {
+        if (!forceReplace) {
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            message: `Class already has a Class Teacher: ${existingClassTeacher.name}. Do you want to replace?`
+          });
+        } else {
+          existingClassTeacher.isClassTeacher = false;
+          await existingClassTeacher.save();
+        }
+      }
+    }
+
     await teacher.save();
 
     const teacherAdmin = new Admin({
@@ -464,7 +496,8 @@ exports.getTeacherById = async (req, res) => {
 exports.updateTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
-    const { name, mobile, subjects, qualification, experience, salary, address, password, assignedClass, assignedSection } = req.body;
+    const { name, mobile, subjects, qualification, experience, salary, address, password, assignedClass, assignedSection, isClassTeacher, teachingAssignments } = req.body;
+    const forceReplace = String(req.body.forceReplace) === 'true';
 
     const admin = await Admin.findById(req.userId);
     if (admin.role !== 'branchAdmin' && admin.role !== 'superAdmin') {
@@ -485,12 +518,44 @@ exports.updateTeacher = async (req, res) => {
     if (subjects) {
       teacher.subjects = typeof subjects === 'string' ? JSON.parse(subjects) : subjects;
     }
+    if (teachingAssignments) {
+      teacher.teachingAssignments = typeof teachingAssignments === 'string' ? JSON.parse(teachingAssignments) : teachingAssignments;
+    }
     if (qualification !== undefined) teacher.qualification = qualification;
     if (experience !== undefined) teacher.experience = experience;
     if (salary !== undefined) teacher.salary = salary;
     if (address !== undefined) teacher.address = address;
+    
+    const targetClass = assignedClass !== undefined ? (assignedClass || null) : teacher.assignedClass;
+    const targetSection = assignedSection !== undefined ? (assignedSection || null) : teacher.assignedSection;
+    const targetIsClassTeacher = isClassTeacher !== undefined ? (String(isClassTeacher) === 'true') : teacher.isClassTeacher;
+
+    if (targetIsClassTeacher && targetClass && targetSection) {
+      const existingClassTeacher = await Teacher.findOne({
+        branch: teacher.branch,
+        assignedClass: targetClass,
+        assignedSection: targetSection,
+        isClassTeacher: true,
+        _id: { $ne: teacher._id }
+      });
+
+      if (existingClassTeacher) {
+        if (!forceReplace) {
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            message: `Class already has a Class Teacher: ${existingClassTeacher.name}. Do you want to replace?`
+          });
+        } else {
+          existingClassTeacher.isClassTeacher = false;
+          await existingClassTeacher.save();
+        }
+      }
+    }
+
     if (assignedClass !== undefined) teacher.assignedClass = assignedClass || null;
     if (assignedSection !== undefined) teacher.assignedSection = assignedSection || null;
+    teacher.isClassTeacher = targetIsClassTeacher;
 
     if (req.file) {
       if (teacher.profileImage && !teacher.profileImage.startsWith('http')) {

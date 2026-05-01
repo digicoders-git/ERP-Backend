@@ -27,7 +27,7 @@ exports.getAllTeachers = async (req, res) => {
 
     const [teachers, total] = await Promise.all([
       Teacher.find(query)
-        .select('name email mobile subjects qualification experience salary status createdAt')
+        .select('name email mobile subjects qualification experience salary status createdAt profileImage customId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))

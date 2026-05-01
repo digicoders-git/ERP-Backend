@@ -18,4 +18,7 @@ router.get('/recent-activities', auth, dashboardController.getRecentActivities);
 // Get upcoming classes
 router.get('/upcoming-classes', auth, dashboardController.getUpcomingClasses);
 
+// Get attendance configuration
+router.get('/attendance-settings', auth, dashboardController.getAttendanceSettings);
+
 module.exports = router;

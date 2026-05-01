@@ -7,17 +7,18 @@ const Staff = require('../../model/Staff');
 exports.createExamSchedule = async (req, res) => {
   try {
     const {
-      examTitle, examType, subject,
+      examTitle, examType, examTypeId, subject,
       examDate, startTime, endTime, roomHall, invigilatorName,
       totalMarks, passingMarks, specialInstructions
     } = req.body;
     
+    // Support both class and classId for flexibility
     const classId = req.body.classId || req.body.class;
     const sectionId = req.body.sectionId || req.body.section;
     const staffId = req.userId;
 
-    if (!classId || !sectionId) {
-      return res.status(400).json({ message: 'Class and Section are required' });
+    if (!classId || !sectionId || !examType) {
+      return res.status(400).json({ message: 'Class, Section, and Exam Type are required' });
     }
 
     const staff = await Staff.findById(staffId);
@@ -27,40 +28,13 @@ exports.createExamSchedule = async (req, res) => {
 
     const classData = await Class.findById(classId);
     if (!classData) {
-      return res.status(404).json({ message: 'Class not found. Please select a valid class.' });
-    }
-
-    if (classData.branch.toString() !== staff.branch.toString()) {
-      return res.status(403).json({ message: 'Class does not belong to your branch' });
-    }
-
-    if (examType === 'pre-board' || examType === 'board') {
-      const className = classData.className.toLowerCase();
-      if (!className.includes('10') && !className.includes('12') && 
-          !className.includes('tenth') && !className.includes('twelfth') &&
-          !className.includes('x') && !className.includes('xii')) {
-        return res.status(400).json({ 
-          message: 'Pre-board and Board exams are only allowed for 10th and 12th classes' 
-        });
-      }
-    }
-
-    const section = await Section.findById(sectionId);
-    if (!section) {
-      return res.status(404).json({ message: 'Section not found' });
-    }
-
-    if (section.assignToClass.toString() !== classId) {
-      return res.status(400).json({ message: 'Section does not belong to the selected class' });
-    }
-
-    if (section.branch.toString() !== staff.branch.toString()) {
-      return res.status(403).json({ message: 'Section does not belong to your branch' });
+      return res.status(404).json({ message: 'Class not found' });
     }
 
     const newExamSchedule = new ExamSchedule({
-      examTitle,
+      examTitle: examTitle || `${examType} - ${subject}`,
       examType,
+      examTypeId: examTypeId || null,
       class: classId,
       section: sectionId,
       subject,
@@ -69,8 +43,8 @@ exports.createExamSchedule = async (req, res) => {
       endTime,
       roomHall,
       invigilatorName,
-      totalMarks,
-      passingMarks,
+      totalMarks: totalMarks || 100,
+      passingMarks: passingMarks || 33,
       specialInstructions,
       branch: staff.branch,
       client: staff.client,
@@ -78,10 +52,65 @@ exports.createExamSchedule = async (req, res) => {
     });
 
     await newExamSchedule.save();
-    res.status(201).json({ message: 'Exam schedule created successfully', examSchedule: newExamSchedule });
+    res.status(201).json({ 
+      success: true,
+      message: 'Exam schedule created successfully', 
+      examSchedule: newExamSchedule 
+    });
   } catch (error) {
+    console.error('Create Exam Schedule Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
+};
+
+// Create Bulk Exam Schedules
+exports.createBulkExamSchedule = async (req, res) => {
+    try {
+        const {
+            examTitle, examType, examTypeId, classId, sectionId, subjects
+        } = req.body;
+        const staffId = req.userId;
+
+        if (!classId || !sectionId || !examType || !subjects || !subjects.length) {
+            return res.status(400).json({ message: 'Class, Section, Exam Type, and Subjects are required' });
+        }
+
+        const staff = await Staff.findById(staffId);
+        if (!staff) return res.status(403).json({ message: 'Staff not found' });
+
+        const createdSchedules = [];
+        for (const sub of subjects) {
+            const newSchedule = new ExamSchedule({
+                examTitle: examTitle || `${examType} - ${sub.subject}`,
+                examType,
+                examTypeId: examTypeId || null,
+                class: classId,
+                section: sectionId,
+                subject: sub.subject,
+                examDate: sub.examDate,
+                startTime: sub.startTime,
+                endTime: sub.endTime,
+                roomHall: sub.roomHall || req.body.roomHall || 'N/A',
+                invigilatorName: sub.invigilatorName || req.body.invigilatorName || 'N/A',
+                totalMarks: sub.totalMarks || req.body.totalMarks || 100,
+                passingMarks: sub.passingMarks || req.body.passingMarks || 33,
+                branch: staff.branch,
+                client: staff.client,
+                createdBy: staffId
+            });
+            await newSchedule.save();
+            createdSchedules.push(newSchedule);
+        }
+
+        res.status(201).json({ 
+            success: true, 
+            message: `${createdSchedules.length} Exam schedules created successfully`,
+            data: createdSchedules 
+        });
+    } catch (error) {
+        console.error('Bulk Create Exam Schedule Error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
 };
 
 // Get All Exam Schedules
@@ -106,7 +135,7 @@ exports.getAllExamSchedules = async (req, res) => {
       ];
     }
 
-    if (examType && ['unit', 'mid', 'final', 'pre-board', 'board'].includes(examType)) {
+    if (examType) {
       searchQuery.examType = examType;
     }
 
@@ -117,6 +146,7 @@ exports.getAllExamSchedules = async (req, res) => {
     const examSchedules = await ExamSchedule.find(searchQuery)
       .populate('class', 'className classCode')
       .populate('section', 'sectionName')
+      .populate('examTypeId', 'marksType theoryMarks practicalMarks totalMarks passingPercentage')
       .populate('createdBy', 'email')
       .sort({ examDate: 1 })
       .skip(skip)
@@ -152,6 +182,7 @@ exports.getExamScheduleById = async (req, res) => {
     const examSchedule = await ExamSchedule.findById(id)
       .populate('class', 'className classCode')
       .populate('section', 'sectionName')
+      .populate('examTypeId', 'marksType theoryMarks practicalMarks totalMarks passingPercentage')
       .populate('branch', 'branchName branchCode')
       .populate('createdBy', 'email');
 
@@ -174,7 +205,7 @@ exports.updateExamSchedule = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      examTitle, examType, subject,
+      examTitle, examType, examTypeId, subject,
       examDate, startTime, endTime, roomHall, invigilatorName,
       totalMarks, passingMarks, specialInstructions
     } = req.body;
@@ -231,6 +262,7 @@ exports.updateExamSchedule = async (req, res) => {
 
     if (examTitle) examSchedule.examTitle = examTitle;
     if (examType) examSchedule.examType = examType;
+    if (examTypeId !== undefined) examSchedule.examTypeId = examTypeId || null;
     if (subject) examSchedule.subject = subject;
     if (examDate) examSchedule.examDate = examDate;
     if (startTime) examSchedule.startTime = startTime;

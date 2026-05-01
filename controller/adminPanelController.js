@@ -8,6 +8,7 @@ const Vehicle = require('../model/Vehicle');
 const Book = require('../model/Book');
 const HostelAllocation = require('../model/HostelAllocation');
 const Approval = require('../model/Approval');
+const Fee = require('../model/Fee');
 const mongoose = require('mongoose');
 
 const getClientAdmin = async (userId) => {
@@ -160,7 +161,7 @@ exports.getBranchDetail = async (req, res) => {
 
     const [studentList, teacherList, fees] = await Promise.all([
       Student.find({ branch: branchId }).select('_id name email mobile status class rollNo').lean().limit(100),
-      Teacher.find({ branch: branchId }).select('_id name email mobile status subject').lean().limit(100),
+      Teacher.find({ branch: branchId }).select('_id name email mobile status subjects').lean().limit(100),
       FeeCollection.aggregate([
         { $match: { branch: new mongoose.Types.ObjectId(branchId) } },
         { $group: { _id: null, collected: { $sum: '$amountPaid' }, pending: { $sum: '$balance' } } }
@@ -252,7 +253,7 @@ exports.getTeacherData = async (req, res) => {
     const [teacherList, total, active] = await Promise.all([
       Teacher.find(query)
         .populate('branch', 'branchName')
-        .select('_id name email mobile status branch subject qualification experience salary profileImage')
+        .select('_id name email mobile status branch subjects qualification experience salary profileImage')
         .lean()
         .limit(100),
       Teacher.countDocuments(query),
@@ -283,36 +284,37 @@ exports.getFeeData = async (req, res) => {
 
     if (search) {
       query.$or = [
-        { 'student.name': { $regex: search, $options: 'i' } },
-        { 'student.email': { $regex: search, $options: 'i' } }
+        { feeName: { $regex: search, $options: 'i' } },
+        { feeType: { $regex: search, $options: 'i' } }
       ];
     }
 
-    const [feeList, total, collected, pending] = await Promise.all([
-      FeeCollection.find(query)
-        .populate('student', 'name email class')
+    const [feeList, total, active, totalAmount] = await Promise.all([
+      Fee.find(query)
         .populate('branch', 'branchName')
-        .select('_id student amountPaid balance paymentDate status')
         .lean()
         .limit(100),
-      FeeCollection.countDocuments(query),
-      FeeCollection.aggregate([
+      Fee.countDocuments(query),
+      Fee.countDocuments({ ...query, status: true }),
+      Fee.aggregate([
         { $match: query },
-        { $group: { _id: null, total: { $sum: '$amountPaid' } } }
-      ]),
-      FeeCollection.aggregate([
-        { $match: query },
-        { $group: { _id: null, total: { $sum: '$balance' } } }
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ])
     ]);
 
+    const formattedData = feeList.map(f => ({
+      ...f,
+      status: f.status ? 'Active' : 'Inactive'
+    }));
+
     res.status(200).json({
       success: true,
-      data: feeList,
+      data: formattedData,
       stats: {
         total,
-        collected: collected[0]?.total || 0,
-        pending: pending[0]?.total || 0
+        active,
+        inactive: total - active,
+        totalAmount: totalAmount[0]?.total || 0
       }
     });
   } catch (error) {
@@ -615,6 +617,46 @@ exports.updateProfile = async (req, res) => {
     if (!admin) return res.status(404).json({ success: false, message: 'Admin not found' });
     res.status(200).json({ success: true, message: 'Profile updated', data: admin });
   } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+exports.generateIdCards = async (req, res) => {
+  try {
+    const { studentIds } = req.body;
+    const admin = await getClientAdmin(req.userId);
+    if (!admin) return res.status(403).json({ success: false, message: 'Unauthorized' });
+
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'No students selected' });
+    }
+
+    const students = await Student.find({
+      _id: { $in: studentIds },
+      client: admin.client
+    }).lean();
+
+    if (students.length === 0) {
+      return res.status(404).json({ success: false, message: 'No students found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'ID cards generated successfully',
+      data: {
+        count: students.length,
+        students: students.map(s => ({
+          _id: s._id,
+          name: s.name,
+          rollNumber: s.rollNumber,
+          class: s.class,
+          section: s.section,
+          profileImage: s.profileImage
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Generate ID cards error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };

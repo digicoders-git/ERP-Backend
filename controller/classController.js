@@ -72,32 +72,38 @@ exports.getAllClasses = async (req, res) => {
       classes = await Class.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
-        .populate('classTeacher', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
       total = await Class.countDocuments(searchQuery);
     } else if (admin.role === 'clientAdmin') {
       searchQuery.client = admin.client;
       classes = await Class.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('createdBy', 'email role')
-        .populate('classTeacher', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
       total = await Class.countDocuments(searchQuery);
     } else {
       classes = await Class.find(searchQuery)
         .populate('branch', 'branchName branchCode')
         .populate('client', 'name')
         .populate('createdBy', 'email role')
-        .populate('classTeacher', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
       total = await Class.countDocuments(searchQuery);
     }
+
+    const Teacher = require('../model/Teacher');
+    classes = await Promise.all(classes.map(async (cls) => {
+      const classTeacher = await Teacher.findOne({ assignedClass: cls._id, isClassTeacher: true }).select('name email').lean();
+      return { ...cls, classTeacher: classTeacher || null };
+    }));
 
     res.status(200).json({ 
       classes, 
@@ -128,7 +134,7 @@ exports.getClassById = async (req, res) => {
       .populate('branch', 'branchName branchCode')
       .populate('client', 'name')
       .populate('createdBy', 'email role')
-      .populate('classTeacher', 'name email');
+      .lean();
 
     if (!classData) {
       return res.status(404).json({ message: 'Class not found' });
@@ -141,6 +147,11 @@ exports.getClassById = async (req, res) => {
     if (admin.role === 'clientAdmin' && classData.client._id.toString() !== admin.client.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
+
+    // Fetch true class teacher from Teacher model
+    const Teacher = require('../model/Teacher');
+    const classTeacher = await Teacher.findOne({ assignedClass: id, isClassTeacher: true }).select('name email').lean();
+    classData.classTeacher = classTeacher || null;
 
     res.status(200).json({ class: classData });
   } catch (error) {

@@ -5,9 +5,10 @@ const leaveSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
   staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
   staffName: { type: String, trim: true },
+  studentName: { type: String, trim: true },
   leaveType: {
     type: String,
-    enum: ['Sick Leave', 'Annual Leave', 'Maternity Leave', 'Paternity Leave', 'Emergency Leave', 'Casual Leave', 'Parental Leave', 'Medical', 'Other'],
+    enum: ['Sick Leave', 'Annual Leave', 'Maternity Leave', 'Paternity Leave', 'Emergency Leave', 'Casual Leave', 'Parental Leave', 'Medical', 'Other', 'Family Event', 'Marriage', 'Urgent Work', 'Others'],
     required: true
   },
   startDate: { type: Date, required: true },

@@ -46,7 +46,10 @@ exports.loginAdmin = async (req, res) => {
       libraryAdmin: ['libraryAdmin'],
     };
 
-    const admin = await Admin.findOne({ email }).populate('client', 'name').populate('branch', 'branchName branchCode');
+    const admin = await Admin.findOne({ email })
+      .populate('client')
+      .populate('branch', 'branchName branchCode');
+    
     if (!admin) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -67,8 +70,26 @@ exports.loginAdmin = async (req, res) => {
       }
     }
 
+    // Set allowedPanels based on client's purchasedPanels
+    let allowedPanels = [];
+    console.log('DEBUG: admin.client =', admin.client);
+    
+    if (admin.client && admin.client.purchasedPanels && admin.client.purchasedPanels.length > 0) {
+      allowedPanels = admin.client.purchasedPanels;
+    } else {
+      // Fallback: if no purchasedPanels, use all panels
+      allowedPanels = ['school', 'staff', 'fee', 'warden', 'library', 'transport', 'teacher', 'parent', 'student'];
+    }
+    console.log('DEBUG Login:', { clientId: admin.client?._id, purchasedPanels: admin.client?.purchasedPanels, allowedPanels });
+
+    // Ensure branch admin has all purchasedPanels
+    if (admin.role === 'branchAdmin') {
+      admin.allowedPanels = allowedPanels;
+      await admin.save();
+    }
+
     const token = jwt.sign(
-      { _id: admin._id, role: admin.role, email: admin.email, branch: admin.branch?._id, client: admin.client?._id },
+      { _id: admin._id, role: admin.role, email: admin.email, branch: admin.branch?._id, client: admin.client?._id, allowedPanels: allowedPanels },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -85,7 +106,7 @@ exports.loginAdmin = async (req, res) => {
         address: admin.address,
         profileImage: admin.profileImage,
         role: admin.role,
-        allowedPanels: admin.allowedPanels,
+        allowedPanels: allowedPanels,
         client: admin.client,
         branch: admin.branch
       }

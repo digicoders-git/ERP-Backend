@@ -8,8 +8,12 @@ const examScheduleSchema = new mongoose.Schema({
   },
   examType: {
     type: String,
-    enum: ['unit', 'mid', 'final', 'pre-board', 'board'],
     required: true
+  },
+  examTypeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ExamType',
+    default: null
   },
   class: {
     type: mongoose.Schema.Types.ObjectId,

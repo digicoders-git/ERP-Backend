@@ -8,6 +8,7 @@ router.use(flexibleAuth);
 
 router.get('/all', timetableController.getAllTimetables);
 router.post('/add', timetableController.addTimetable);
+router.post('/bulk', timetableController.createBulkTimetable);
 router.put('/:id', timetableController.updateTimetable);
 router.delete('/:id', timetableController.deleteTimetable);
 

@@ -137,20 +137,79 @@ exports.markAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Date, class, section, and attendanceData array are required' });
     }
 
-    // Get admin's branch
-    const admin = await Admin.findById(req.userId).select('branch').lean();
+    // Get admin's branch and teacher profile
+    const admin = await Admin.findById(req.userId).select('branch teacher role').lean();
     if (!admin) {
       return res.status(401).json({ success: false, message: 'Admin not found' });
     }
 
-    const { start: queryDate } = dateToUTCRange(date);
     const branchId = admin.branch;
+    const teacherProfileId = admin.teacher;
     const classObjId = toObjId(classId);
     const sectionObjId = toObjId(sectionId);
 
     if (!classObjId || !sectionObjId) {
       return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
     }
+
+    // Role-based check: Only class teacher or substitute can mark attendance
+    const teacher = await Teacher.findById(teacherProfileId).select('assignedClass assignedSection').lean();
+    
+    let isAuthorized = false;
+
+    // 1. Check if Primary Class Teacher
+    if (teacher && 
+        String(teacher.assignedClass) === String(classId) && 
+        String(teacher.assignedSection) === String(sectionId)) {
+      isAuthorized = true;
+    }
+
+    // 2. Check if Substitute Teacher for today
+    if (!isAuthorized) {
+      const SubstituteTeacher = require('../../model/SubstituteTeacher');
+      const now = new Date();
+      const substitute = await SubstituteTeacher.findOne({
+        branch: branchId,
+        substituteTeacherId: teacherProfileId,
+        classId: classObjId,
+        sectionId: sectionObjId,
+        startDate: { $lte: now },
+        endDate: { $gte: now }
+      }).lean();
+
+      if (substitute) isAuthorized = true;
+    }
+
+    // 3. Admin / Branch Admin override (optional, but requested role-based behavior)
+    if (admin.role === 'branchAdmin' || admin.role === 'superAdmin') {
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access Denied: Only the Class Teacher or a Substitute can mark student attendance.' 
+      });
+    }
+
+    // 4. Check Attendance Mode Settings
+    const AttendanceSetting = require('../../model/AttendanceSetting');
+    const settings = await AttendanceSetting.findOne({ branch: branchId });
+    
+    if (settings) {
+      // If mode is Biometric Only and teacher override is not allowed, block manual entry
+      if (settings.mode === 'biometric' && !settings.allowTeacherOverride) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Manual entry disabled: System is in Biometric Only mode' 
+        });
+      }
+      
+      // If mode is App Based, usually students mark, but we can allow teacher monitor/edit if needed
+      // For now, let's allow it unless strictly blocked
+    }
+
+    const { start: queryDate } = dateToUTCRange(date);
 
     const bulkOps = attendanceData.map(item => ({
       updateOne: {
@@ -166,7 +225,8 @@ exports.markAttendance = async (req, res) => {
           $set: { 
             status: item.status.toLowerCase(), 
             remark: item.remark || '', 
-            markedBy: req.userId 
+            markedBy: req.userId,
+            markedByType: 'Admin'
           } 
         },
         upsert: true
@@ -189,15 +249,57 @@ exports.getAttendanceByClass = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Class and section are required' });
     }
 
-    // Get admin's branch
-    const admin = await Admin.findById(req.userId).select('branch').lean();
+    // Get admin's branch and teacher profile
+    const admin = await Admin.findById(req.userId).select('branch teacher role').lean();
     if (!admin) {
       return res.status(401).json({ success: false, message: 'Admin not found' });
     }
 
+    const teacherProfileId = admin.teacher;
+    const teacher = await Teacher.findById(teacherProfileId).select('assignedClass assignedSection').lean();
+    
+    // Get the actual primary class teacher for this class/section
+    const primaryTeacher = await Teacher.findOne({
+      assignedClass: classId,
+      assignedSection: sectionId
+    }).select('name').lean();
+
     const branchId = admin.branch;
     const classObjId = toObjId(classId);
     const sectionObjId = toObjId(sectionId);
+
+    if (!classObjId || !sectionObjId) {
+      return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
+    }
+
+    // Check if authorized to MARK (only class teacher or substitute or admin)
+    let isClassTeacher = false;
+    let isSubstitute = false;
+
+    if (teacher && 
+        String(teacher.assignedClass) === String(classId) && 
+        String(teacher.assignedSection) === String(sectionId)) {
+      isClassTeacher = true;
+    }
+
+    // Check Substitute for the given date
+    if (!isClassTeacher) {
+      const SubstituteTeacher = require('../../model/SubstituteTeacher');
+      const targetDate = date ? new Date(date) : new Date();
+      const substitute = await SubstituteTeacher.findOne({
+        branch: admin.branch,
+        substituteTeacherId: teacherProfileId,
+        classId: classObjId,
+        sectionId: sectionObjId,
+        startDate: { $lte: targetDate },
+        endDate: { $gte: targetDate }
+      }).lean();
+      
+      if (substitute) isSubstitute = true;
+    }
+
+    // Admins are always authorized
+    const isAuthorized = isClassTeacher || isSubstitute || ['branchAdmin', 'superAdmin'].includes(admin.role);
 
     if (!classObjId || !sectionObjId) {
       return res.status(400).json({ success: false, message: 'Invalid class or section ID' });
@@ -244,7 +346,17 @@ exports.getAttendanceByClass = async (req, res) => {
         sectionId: sectionObjId,
         date: { $gte: rangeStart, $lte: rangeEnd },
         type: 'student'
-      }).select('studentId status remark').lean()
+      })
+      .select('studentId status remark markedBy markedByType source')
+      .populate({
+        path: 'markedBy',
+        select: 'name email role teacher staff',
+        populate: [
+          { path: 'teacher', select: 'name' },
+          { path: 'staff', select: 'name' }
+        ]
+      })
+      .lean()
     ]);
 
     const attMap = {};
@@ -252,20 +364,47 @@ exports.getAttendanceByClass = async (req, res) => {
       attMap[r.studentId.toString()] = { status: r.status, remark: r.remark };
     });
 
-    const result = students.map(s => ({
-      studentId: s._id,
-      name: `${s.firstName} ${s.lastName}`,
-      rollNo: s.rollNumber,
-      status: attMap[s._id.toString()]?.status || 'not_marked',
-      remark: attMap[s._id.toString()]?.remark || ''
-    }));
+    const result = students.map(s => {
+      const record = attendanceRecords.find(r => r.studentId.toString() === s._id.toString());
+      
+      let markerName = 'Unknown';
+      if (record?.markedBy) {
+        const marker = record.markedBy;
+        const markerTeacherId = marker.teacher?._id || marker.teacher; // Handle populated or ID
+        
+        const isPrimary = primaryTeacher && String(primaryTeacher._id) === String(markerTeacherId);
+        
+        markerName = marker.name || marker.teacher?.name || marker.staff?.name || marker.email || 'Staff';
+        
+        if (marker.role === 'branchAdmin') {
+          markerName += ' (Admin)';
+        } else if (isPrimary) {
+          markerName += ' (Class Teacher)';
+        } else {
+          markerName += ' (Substitute)';
+        }
+      }
+
+      return {
+        studentId: s._id,
+        name: `${s.firstName} ${s.lastName}`,
+        rollNo: s.rollNumber,
+        status: record?.status || 'not_marked',
+        remark: record?.remark || '',
+        source: record?.source || 'manual',
+        markedBy: record ? markerName : null
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: result,
       date: displayDate,
       totalStudents: students.length,
-      markedCount: attendanceRecords.length
+      markedCount: attendanceRecords.length,
+      isClassTeacher,
+      isSubstitute,
+      isAuthorized
     });
   } catch (error) {
     console.error('Get attendance error:', error);
@@ -368,10 +507,28 @@ exports.bulkUpdateAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Date, class, section, and status are required' });
     }
 
-    // Get admin's branch
-    const admin = await Admin.findById(req.userId).select('branch').lean();
+    // Get admin's branch and teacher profile
+    const admin = await Admin.findById(req.userId).select('branch teacher role').lean();
     if (!admin) {
       return res.status(401).json({ success: false, message: 'Admin not found' });
+    }
+
+    const teacherProfileId = admin.teacher;
+    const teacher = await Teacher.findById(teacherProfileId).select('assignedClass assignedSection').lean();
+    
+    let isAuthorized = false;
+    if (teacher && 
+        String(teacher.assignedClass) === String(classId) && 
+        String(teacher.assignedSection) === String(sectionId)) {
+      isAuthorized = true;
+    }
+
+    if (admin.role === 'branchAdmin' || admin.role === 'superAdmin') {
+      isAuthorized = true;
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, message: 'Access Denied: You can only bulk update your own assigned class.' });
     }
 
     const { start: queryDate } = dateToUTCRange(date);

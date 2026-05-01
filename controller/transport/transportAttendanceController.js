@@ -154,6 +154,23 @@ exports.markAttendance = async (req, res) => {
 
     await attendance.save();
 
+    // --- Real-time socket update ---
+    const { emitToTrip } = require('../../config/socket');
+    const Trip = require('../../model/Trip');
+    const activeTrip = await Trip.findOne({ 
+      driver: req.driverId, 
+      route: assignment.route._id,
+      status: 'ongoing' 
+    });
+    if (activeTrip) {
+      emitToTrip(activeTrip._id, 'student_attendance', {
+        studentId: student.student?._id || student.student,
+        status,
+        attendanceType,
+        time: new Date()
+      });
+    }
+
     // Send notification to parent
     await sendParentNotification(student, attendanceType, routeStop, driver);
 
@@ -226,7 +243,7 @@ exports.updateStopStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Route stop not found' });
     }
 
-    // Get all students at this stop
+    // Get all students at this stop for notifications
     const students = await TransportAllocation.find({
       route: assignment.route._id,
       routeStop: routeStopId,
@@ -242,10 +259,68 @@ exports.updateStopStatus = async (req, res) => {
       }
     }
 
+    // --- Sync with Trip Tracking State ---
+    const Trip = require('../../model/Trip');
+    const { emitToTrip } = require('../../config/socket');
+
+    // Find any ongoing trip for this route and driver
+    const activeTrip = await Trip.findOne({ 
+      driver: req.driverId, 
+      route: assignment.route._id,
+      status: 'ongoing' 
+    });
+
+    if (activeTrip) {
+      if (status === 'arrived') {
+        activeTrip.trackingStatus = 'arrived';
+        activeTrip.currentStop = routeStopId;
+        activeTrip.lastUpdated = new Date();
+        await activeTrip.save();
+
+        // Real-time update for parents
+        emitToTrip(activeTrip._id, 'trip_update', {
+          tripId: activeTrip._id,
+          status: 'arrived',
+          currentStop: routeStop.stopName,
+          lastUpdated: activeTrip.lastUpdated
+        });
+        emitToTrip(activeTrip._id, 'stop_arrival', { stopId: routeStopId, stopName: routeStop.stopName });
+      } 
+      else if (status === 'departed') {
+        activeTrip.trackingStatus = 'moving';
+        activeTrip.lastUpdated = new Date();
+        
+        // Find next stop
+        const allStops = await RouteStop.find({ route: assignment.route._id }).sort({ stopOrder: 1 });
+        const currentIndex = allStops.findIndex(s => s._id.toString() === routeStopId);
+        const nextStop = allStops[currentIndex + 1];
+
+        if (nextStop) {
+          activeTrip.nextStop = nextStop._id;
+          activeTrip.currentStopIndex = currentIndex + 1;
+        }
+        await activeTrip.save();
+
+        // Real-time update for parents
+        emitToTrip(activeTrip._id, 'trip_update', {
+          tripId: activeTrip._id,
+          status: 'moving',
+          nextStop: nextStop?.stopName || 'School/Final Destination',
+          fromStop: routeStop.stopName,
+          lastUpdated: activeTrip.lastUpdated
+        });
+        emitToTrip(activeTrip._id, 'next_stop', { 
+          nextStop: nextStop?.stopName || 'Final Destination',
+          fromStop: routeStop.stopName 
+        });
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: `Stop status updated to ${status}`,
-      notificationsSent: students.length
+      notificationsSent: students.length,
+      tripUpdated: !!activeTrip
     });
   } catch (error) {
     console.error('updateStopStatus Error:', error);

@@ -8,13 +8,14 @@ const driverAuth = (req, res, next) => {
       return res.status(401).json({ message: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
     
     // Robust driverId extraction (supports both 'id' and '_id')
     const driverId = decoded.id || decoded._id;
     
     console.log('--- Driver Auth Debug ---');
-    console.log('Decoded ID:', driverId);
+    console.log('Decoded:', decoded);
+    console.log('Extracted driverId:', driverId);
     console.log('Decoded Role:', decoded.role);
 
     if (decoded.role !== 'driver') {
@@ -27,7 +28,16 @@ const driverAuth = (req, res, next) => {
       return res.status(401).json({ message: 'Invalid token structure' });
     }
 
+    // Set both for compatibility
     req.driverId = driverId;
+    req.userId = driverId;
+    req.user = {
+      _id: driverId,
+      role: 'driver',
+      branch: decoded.branch,
+      client: decoded.client
+    };
+    
     console.log('✅ Auth Success. Driver ID:', req.driverId);
     next();
   } catch (error) {

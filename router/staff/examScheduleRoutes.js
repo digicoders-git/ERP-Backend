@@ -4,6 +4,7 @@ const examScheduleController = require('../../controller/staff/examScheduleContr
 const auth = require('../../middleware/staffAuth');
 
 router.post('/add', auth, examScheduleController.createExamSchedule);
+router.post('/bulk', auth, examScheduleController.createBulkExamSchedule);
 router.get('/all', auth, examScheduleController.getAllExamSchedules);
 router.get('/:id', auth, examScheduleController.getExamScheduleById);
 router.put('/:id', auth, examScheduleController.updateExamSchedule);

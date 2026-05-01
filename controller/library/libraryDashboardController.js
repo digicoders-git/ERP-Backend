@@ -80,6 +80,13 @@ exports.getDashboardStats = async (req, res) => {
     
     const totalFine = fineData.length > 0 ? fineData[0].totalFine : 0;
 
+    // Get pending requests count
+    const BookRequest = require('../../model/BookRequest');
+    const pendingRequests = await BookRequest.countDocuments({
+      ...bookQuery,
+      status: { $regex: /^pending$/i }
+    });
+
     res.status(200).json({
       success: true,
       data: {
@@ -91,7 +98,8 @@ exports.getDashboardStats = async (req, res) => {
         overdueBooks,
         todayIssued,
         todayReturned,
-        totalFine
+        totalFine,
+        pendingRequests
       }
     });
   } catch (error) {

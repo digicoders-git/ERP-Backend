@@ -18,115 +18,61 @@ const getBranchClient = async (userId) => {
 // Create a new timetable entry
 exports.addTimetable = async (req, res) => {
   try {
-    const { day, className, classTime, startTime, endTime, subject, room, classId, sectionId, teacherId, teacherName } = req.body;
+    const { day, periodNumber, startTime, endTime, subject, room, classId, sectionId, teacherId, teacherName, className } = req.body;
     const adminId = req.userId;
 
     const admin = await getBranchClient(adminId);
     
-    // Check if user is teacherAdmin - restrict to their assigned class only
-    if (admin.role === 'teacherAdmin') {
-      const teacher = await Teacher.findOne({ createdBy: adminId }).populate('assignedClass');
-      if (!teacher) {
-        return res.status(403).json({ message: 'Teacher profile not found. Please contact admin to create your teacher profile.' });
-      }
-      
-      if (!teacher.assignedClass) {
-        return res.status(403).json({ message: 'No class assigned to this teacher. Please contact admin to assign a class.' });
-      }
-
-      // Teacher can only create timetable for their assigned class
-      const assignedClassId = teacher.assignedClass._id.toString();
-      
-      // If classId provided, check if it matches assigned class
-      if (classId && classId !== assignedClassId) {
-        return res.status(403).json({ message: `You can only create timetable for your assigned class: ${teacher.assignedClass.className}` });
-      }
-
-      // If no classId provided, use assigned class
-      const finalClassId = classId || assignedClassId;
-      
-      // Validate the assigned class exists
-      const Class = require('../../model/Class');
-      const classExists = await Class.findById(finalClassId);
-      if (!classExists) {
-        return res.status(400).json({ message: 'Assigned class not found in database' });
-      }
-
-      // Validate sectionId if provided - must exist in database
-      if (sectionId) {
-        const Section = require('../../model/Section');
-        const sectionExists = await Section.findById(sectionId);
-        if (!sectionExists) {
-          return res.status(400).json({ message: 'Section not found in database' });
-        }
-      }
-
-      // Teacher's own ID should be used
-      const teacherIdToUse = teacherId || teacher._id.toString();
-      const teacherNameToUse = teacherName || teacher.name;
-
-      const timetable = new Timetable({
-        day, 
-        className: className || classExists.className, 
-        classTime,
-        startTime: startTime || (classTime ? classTime.split('-')[0]?.trim() : ''),
-        endTime: endTime || (classTime ? classTime.split('-')[1]?.trim() : ''),
-        subject, 
-        room,
-        classId: finalClassId,
-        sectionId: sectionId || null,
-        teacherId: teacherIdToUse,
-        teacherName: teacherNameToUse,
-        branch: teacher.branch,
-        client: teacher.client,
-        createdBy: adminId
-      });
-
-      await timetable.save();
-      return res.status(201).json({ message: 'Timetable created successfully for your assigned class', timetable });
-    }
-
-    // For admin roles - existing validation
     if (!admin || !['staffAdmin', 'branchAdmin', 'schoolAdmin', 'superAdmin'].includes(admin.role)) {
       return res.status(403).json({ message: 'Access denied: Institutional authority required for timetable operations' });
     }
 
-    // Validate classId if provided - must exist in database
+    // Validate classId
     if (classId) {
       const Class = require('../../model/Class');
       const classExists = await Class.findById(classId);
-      if (!classExists) {
-        return res.status(400).json({ message: 'Class not found in database' });
-      }
+      if (!classExists) return res.status(400).json({ message: 'Class not found' });
     }
 
-    // Validate sectionId if provided - must exist in database
+    // Validate sectionId
     if (sectionId) {
       const Section = require('../../model/Section');
       const sectionExists = await Section.findById(sectionId);
-      if (!sectionExists) {
-        return res.status(400).json({ message: 'Section not found in database' });
-      }
+      if (!sectionExists) return res.status(400).json({ message: 'Section not found' });
     }
 
-    // Validate teacherId if provided - must exist in database
+    // Validate teacherId
     if (teacherId) {
       const TeacherModel = require('../../model/Teacher');
       const teacherExists = await TeacherModel.findById(teacherId);
-      if (!teacherExists) {
-        return res.status(400).json({ message: 'Teacher not found in database' });
+      if (!teacherExists) return res.status(400).json({ message: 'Teacher not found' });
+    }
+
+    // Check for conflict: Same teacher, same day, same period
+    if (teacherId && day && periodNumber) {
+      const conflict = await Timetable.findOne({ day, periodNumber, teacherId, branch: admin.branch })
+        .populate('classId', 'className')
+        .populate('sectionId', 'sectionName');
+        
+      if (conflict) {
+        const classStr = conflict.classId ? `${conflict.classId.className}${conflict.className?.includes('(') ? ' (' + conflict.className.split('(')[1] : ''}` : conflict.className || 'Another Class';
+        const sectionStr = conflict.sectionId ? conflict.sectionId.sectionName : 'N/A';
+        
+        return res.status(400).json({ 
+          message: `Teacher Busy: ${teacherName || 'Teacher'} is in ${classStr}-${sectionStr} (P${periodNumber})` 
+        });
       }
     }
 
     const timetable = new Timetable({
       day, 
-      className, 
-      classTime,
-      startTime: startTime || (classTime ? classTime.split('-')[0]?.trim() : ''),
-      endTime: endTime || (classTime ? classTime.split('-')[1]?.trim() : ''),
+      periodNumber,
+      startTime,
+      endTime,
       subject, 
       room,
       classId: classId || null,
+      className: className || null,
       sectionId: sectionId || null,
       teacherId: teacherId || null,
       teacherName: teacherName || null,
@@ -136,9 +82,47 @@ exports.addTimetable = async (req, res) => {
     });
 
     await timetable.save();
-    res.status(201).json({ message: 'Scholastic unit registered successfully', timetable });
+    res.status(201).json({ success: true, message: 'Scholastic unit registered successfully', timetable });
   } catch (error) {
     res.status(500).json({ message: 'Registry anomaly detected', error: error.message });
+  }
+};
+
+// Create bulk timetable entries for multiple days/periods
+exports.createBulkTimetable = async (req, res) => {
+  try {
+    const { classId, sectionId, schedule } = req.body; // schedule is an array of entries
+    const adminId = req.userId;
+    const admin = await getBranchClient(adminId);
+
+    if (!schedule || !Array.isArray(schedule)) {
+      return res.status(400).json({ message: 'Invalid schedule data provided' });
+    }
+
+    const entries = schedule.map(entry => ({
+      day: entry.day,
+      periodNumber: entry.periodNumber,
+      classId,
+      sectionId,
+      subject: entry.subject,
+      teacherId: entry.teacherId || null,
+      teacherName: entry.teacherName,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      room: entry.room || '',
+      branch: admin.branch,
+      client: admin.client,
+      createdBy: adminId
+    }));
+
+    const result = await Timetable.insertMany(entries);
+    res.status(201).json({ 
+      success: true, 
+      message: `${result.length} academic periods synchronized successfully`,
+      count: result.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Bulk synchronization failure', error: error.message });
   }
 };
 
@@ -230,6 +214,32 @@ exports.updateTimetable = async (req, res) => {
       sectionId: sectionId && sectionId !== '' ? sectionId : null,
       teacherId: teacherId && teacherId !== '' ? teacherId : null,
     };
+
+    // Check for conflict if teacher, day, or period is changing
+    const checkTeacher = updates.teacherId || timetable.teacherId;
+    const checkDay = updates.day || timetable.day;
+    const checkPeriod = timetable.periodNumber; // periodNumber usually doesn't change in this UI
+
+    if (checkTeacher && checkDay && checkPeriod) {
+      const conflict = await Timetable.findOne({ 
+        _id: { $ne: id },
+        day: checkDay, 
+        periodNumber: checkPeriod, 
+        teacherId: checkTeacher, 
+        branch: admin.branch 
+      })
+      .populate('classId', 'className')
+      .populate('sectionId', 'sectionName');
+
+      if (conflict) {
+        const classStr = conflict.classId ? `${conflict.classId.className}${conflict.className?.includes('(') ? ' (' + conflict.className.split('(')[1] : ''}` : conflict.className || 'Another Class';
+        const sectionStr = conflict.sectionId ? conflict.sectionId.sectionName : 'N/A';
+        
+        return res.status(400).json({ 
+          message: `Teacher Busy: ${conflict.teacherName || 'Teacher'} is in ${classStr}-${sectionStr} (P${checkPeriod})` 
+        });
+      }
+    }
 
     // Handle time
     if (startTime) updates.startTime = startTime;

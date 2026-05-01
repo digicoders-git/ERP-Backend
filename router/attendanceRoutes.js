@@ -10,5 +10,9 @@ router.get('/report', flexibleAuth, attendanceController.getAttendanceReport);
 router.get('/students', flexibleAuth, attendanceController.getStudentsForAttendance);
 router.get('/staff-list', flexibleAuth, attendanceController.getStaffForAttendance);
 router.delete('/:id', flexibleAuth, attendanceController.deleteAttendance);
+router.put('/update/:id', flexibleAuth, attendanceController.updateAttendance);
+router.post('/biometric/sync', flexibleAuth, attendanceController.syncBiometric);
+router.post('/substitute/assign', flexibleAuth, attendanceController.assignSubstitute);
+router.get('/substitute/all', flexibleAuth, attendanceController.getSubstitutes);
 
 module.exports = router;

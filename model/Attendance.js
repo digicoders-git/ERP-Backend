@@ -10,9 +10,22 @@ const attendanceSchema = new mongoose.Schema({
   sectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
   // For staff attendance
   staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
-  status: { type: String, enum: ['present', 'absent', 'late', 'half-day', 'leave'], required: true },
+  status: { type: String, enum: ['present', 'absent', 'late', 'half-day', 'leave', 'left-early'], required: true },
   remark: { type: String, trim: true },
-  markedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' }
+  
+  // New Fields for Biometric & Advanced Engine
+  source: { type: String, enum: ['manual', 'biometric', 'app', 'excel'], default: 'manual' },
+  mode: { type: String, enum: ['manual', 'biometric', 'hybrid', 'app'], default: 'manual' },
+  device_mode: { type: String, enum: ['test', 'live'], default: 'test' },
+  timeIn: { type: Date },
+  timeOut: { type: Date },
+  
+  // Dynamic polymorphic marker to allow Admin or Teacher marking it
+  markedBy: { type: mongoose.Schema.Types.ObjectId, refPath: 'markedByType' },
+  markedByType: { type: String, enum: ['Admin', 'Teacher', 'Student'], default: 'Admin' },
+  
+  // To track manual overrides over biometric
+  overriddenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' }
 }, { timestamps: true });
 
 attendanceSchema.index({ branch: 1, date: 1, type: 1 });

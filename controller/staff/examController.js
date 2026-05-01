@@ -2,12 +2,14 @@ const ExamSchedule = require('../../model/ExamSchedule');
 const Student = require('../../model/Student');
 const Admin = require('../../model/Admin');
 const Staff = require('../../model/Staff');
+const ExamType = require('../../model/ExamType');
+const ClientSettings = require('../../model/ClientSettings');
 const mongoose = require('mongoose');
 
 const getBranchClient = async (userId) => {
-  let user = await Admin.findById(userId).select('branch client').lean();
+  let user = await Admin.findById(userId).populate('branch client').lean();
   if (!user) {
-    user = await Staff.findById(userId).select('branch client').lean();
+    user = await Staff.findById(userId).populate('branch client').lean();
   }
   if (!user) {
     throw new Error('User not found or unauthorized');
@@ -15,21 +17,7 @@ const getBranchClient = async (userId) => {
   return user;
 };
 
-// Marks Schema (embedded in ExamSchedule or separate collection)
-const marksSchema = new mongoose.Schema({
-  examSchedule: { type: mongoose.Schema.Types.ObjectId, ref: 'ExamSchedule', required: true },
-  student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
-  subject: { type: String, required: true },
-  marksObtained: { type: Number, required: true },
-  totalMarks: { type: Number, required: true },
-  grade: { type: String },
-  remarks: { type: String },
-  branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
-  enteredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const Marks = mongoose.models.Marks || mongoose.model('Marks', marksSchema);
+const Marks = require('../../model/Marks');
 
 // Add/Update Marks
 exports.addMarks = async (req, res) => {
@@ -437,8 +425,8 @@ exports.getAllMarksHistory = async (req, res) => {
     // Filter by class if provided
     let filteredMarks = marks;
     if (classId) {
-      filteredMarks = marks.filter(m => 
-        m.student?.class?._id?.toString() === classId || 
+      filteredMarks = marks.filter(m =>
+        m.student?.class?._id?.toString() === classId ||
         m.student?.class?.toString() === classId
       );
     }
@@ -449,6 +437,85 @@ exports.getAllMarksHistory = async (req, res) => {
   }
 };
 
+// --- NEWLY ADDED MISSING FUNCTIONS ---
+
+exports.getExamTypes = async (req, res) => {
+  try {
+    const { branch } = await getBranchClient(req.userId);
+
+    // Try fetching from ExamType collection first
+    let examTypes = await ExamType.find({ branch, status: true })
+      .populate('marksheetTemplate')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Map ExamType model to common format if found
+    if (examTypes.length > 0) {
+      examTypes = examTypes.map(et => ({
+        _id: et._id,
+        examTypeName: et.examTypeName,
+        examTypeCode: et.examTypeCode,
+        description: et.description,
+        isActive: et.status !== false
+      }));
+    }
+
+    // If empty, try fetching from ClientSettings
+    if (examTypes.length === 0) {
+      const settings = await ClientSettings.findOne({ branchId: branch }).lean();
+      if (settings && settings.marksheet && settings.marksheet.examTypes) {
+        examTypes = settings.marksheet.examTypes.map(et => ({
+          _id: et._id,
+          examTypeName: et.name,
+          examTypeCode: et.code,
+          description: et.description,
+          isActive: et.isActive !== false
+        }));
+      }
+    }
+
+    res.status(200).json({ success: true, data: examTypes });
+  } catch (error) {
+    console.error('Get Exam Types Error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching exam types', error: error.message });
+  }
+};
+
+exports.getMarksheetTemplate = async (req, res) => {
+  try {
+    const { examTypeId } = req.params;
+    const ExamType = require('../../model/ExamType');
+    const examType = await ExamType.findById(examTypeId).populate('marksheetTemplate');
+    if (!examType || !examType.marksheetTemplate) {
+      return res.status(404).json({ message: 'Marksheet template not found for this exam type' });
+    }
+    res.status(200).json(examType.marksheetTemplate);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching marksheet template', error: error.message });
+  }
+};
+
+exports.getBranding = async (req, res) => {
+  try {
+    const { branch, client } = await getBranchClient(req.userId);
+    res.status(200).json({ branch, client });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching branding', error: error.message });
+  }
+};
+
+exports.debugAllExamTypes = async (req, res) => {
+  try {
+    const ExamType = require('../../model/ExamType');
+    const examTypes = await ExamType.find({}).lean();
+    res.status(200).json({ count: examTypes.length, examTypes });
+  } catch (error) {
+    res.status(500).json({ message: 'Debug failed', error: error.message });
+  }
+};
+
+// --- END MISSING FUNCTIONS ---
+
 // Helper function to calculate grade
 function calculateGrade(percentage) {
   if (percentage >= 90) return 'A+';
@@ -456,10 +523,180 @@ function calculateGrade(percentage) {
   if (percentage >= 70) return 'B+';
   if (percentage >= 60) return 'B';
   if (percentage >= 50) return 'C';
-  if (percentage >= 40) return 'D';
-  return 'F';
+  if (percentage >= 33) return 'D';
+  return 'E';
 }
 
+exports.getParsedDynamicMarksheet = async (req, res) => {
+  try {
+    const { studentId, examScheduleId, examTypeId } = req.query;
+    const { branch } = await getBranchClient(req.userId);
+    const fs = require('fs');
+    const path = require('path');
+
+    const schedule = await ExamSchedule.findById(examScheduleId).populate('examTypeId').lean();
+
+    if (!schedule && !examScheduleId) {
+      return res.status(200).send('<h1 style="color:red; text-align:center;">Exam Schedule or ID required</h1>');
+    }
+
+    // 1. Determine Exam Type and Template
+    const ExamType = require('../../model/ExamType');
+    let examType;
+    const targetId = schedule?.examTypeId || examTypeId;
+
+    if (targetId && typeof targetId === 'object' && targetId._id) {
+      // If it's already a populated object, use it directly
+      examType = targetId;
+      // But we might need to populate marksheetTemplate if not already there
+      if (!examType.marksheetTemplate || typeof examType.marksheetTemplate !== 'object') {
+        const freshExamType = await ExamType.findById(examType._id).populate('marksheetTemplate').lean();
+        if (freshExamType) examType = freshExamType;
+      }
+    } else if (mongoose.Types.ObjectId.isValid(targetId)) {
+      examType = await ExamType.findById(targetId).populate('marksheetTemplate').lean();
+    } else if (targetId) {
+      // If it's a string name, search by name
+      examType = await ExamType.findOne({
+        $or: [
+          { examTypeName: targetId },
+          { examTypeCode: targetId }
+        ],
+        branch: branch
+      }).populate('marksheetTemplate').lean();
+    }
+
+    let templateHtml = "";
+    let templateSource = "Local File";
+
+    if (examType && examType.marksheetTemplate && examType.marksheetTemplate.htmlContent) {
+      templateHtml = examType.marksheetTemplate.htmlContent;
+      templateSource = "Database Template";
+    } else {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        templateHtml = fs.readFileSync(path.join(__dirname, '../../temp_marksheet_template.html'), 'utf8');
+      } catch (e) {
+        templateHtml = "<h1>Template Not Found</h1><p>Please upload a marksheet template in Admin Panel.</p>";
+      }
+    }
+
+    console.log(`[Marksheet] Using ${templateSource} for Exam: ${examType?.examTypeName}`);
+
+    // 2. Fetch Student, Marks, and Branding
+    const student = await Student.findById(studentId).populate('class section').lean();
+    if (!student) return res.status(200).send('<h1 style="color:red; text-align:center;">Student not found</h1>');
+
+    const branding = await getBranchClient(req.userId);
+
+    // Fetch ALL marks for this exam type
+    const allSchedulesForExamType = await ExamSchedule.find({ examTypeId: examType?._id, branch }).select('_id').lean();
+    const scheduleIds = allSchedulesForExamType.map(s => s._id);
+    const marks = await Marks.find({
+      student: studentId,
+      examSchedule: { $in: scheduleIds }
+    }).populate({
+      path: 'examSchedule',
+      populate: { path: 'subject', select: 'subjectName' }
+    }).lean();
+
+    if (!marks || marks.length === 0) {
+      return res.status(200).send(`
+            <div style="text-align: center; padding: 50px; font-family: sans-serif;">
+                <h1 style="color: #ef4444;">Marks Not Found</h1>
+                <p>No marks recorded for ${student.firstName} in ${examType?.examTypeName || 'this exam'}.</p>
+                <p>Please ensure marks are uploaded for all subjects.</p>
+            </div>
+        `);
+    }
+
+    const totalObtained = marks.reduce((sum, m) => sum + (m.marksObtained || 0), 0);
+    const totalMax = marks.reduce((sum, m) => sum + (m.totalMarks || 0), 0);
+    const percentage = totalMax > 0 ? ((totalObtained / totalMax) * 100).toFixed(1) : 0;
+    const finalGrade = calculateGrade(percentage);
+    const resultStatus = percentage >= 33 ? 'PASSED' : 'FAILED';
+
+    let tableHtml = `
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background-color: #f8fafc; color: #1e293b;">
+                    <th style="border: 1px solid #e2e8f0; padding: 10px; font-size: 10px;">S.No</th>
+                    <th style="border: 1px solid #e2e8f0; padding: 10px; font-size: 10px; text-align: left;">Subject Name</th>
+                    <th style="border: 1px solid #e2e8f0; padding: 10px; font-size: 10px;">Max Marks</th>
+                    <th style="border: 1px solid #e2e8f0; padding: 10px; font-size: 10px;">Min Marks</th>
+                    <th style="border: 1px solid #e2e8f0; padding: 10px; font-size: 10px;">Obtained</th>
+                    <th style="border: 1px solid #e2e8f0; padding: 10px; font-size: 10px;">Grade</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+    marks.forEach((m, index) => {
+      const subMax = m.totalMarks || 100;
+      const subObtained = m.marksObtained || 0;
+      const subPercentage = (subObtained / subMax) * 100;
+
+      tableHtml += `
+            <tr>
+                <td style="border: 1px solid #e2e8f0; padding: 8px; text-align: center;">${index + 1}</td>
+                <td style="border: 1px solid #e2e8f0; padding: 8px; text-align: left; font-weight: 500;">${m.subject || 'Subject'}</td>
+                <td style="border: 1px solid #e2e8f0; padding: 8px; text-align: center;">${subMax}</td>
+                <td style="border: 1px solid #e2e8f0; padding: 8px; text-align: center;">33</td>
+                <td style="border: 1px solid #e2e8f0; padding: 8px; text-align: center; font-weight: bold;">${subObtained}</td>
+                <td style="border: 1px solid #e2e8f0; padding: 8px; text-align: center;">${calculateGrade(subPercentage)}</td>
+            </tr>`;
+    });
+    tableHtml += `</tbody></table>`;
+
+    const templatePath = path.join(__dirname, '../../temp_marksheet_template.html');
+    if (!fs.existsSync(templatePath)) return res.status(200).send('<h1 style="color:red; text-align:center;">Template file not found</h1>');
+
+    let htmlContent = fs.readFileSync(templatePath, 'utf8');
+
+    const settings = await ClientSettings.findOne({ branchId: branding.branch?._id }).lean();
+
+    const schoolName = settings?.branding?.schoolName || branding.client?.name || branding.branch?.branchName || 'School Name';
+    const schoolAddress = settings?.branding?.address || branding.branch?.address || 'Address Not Found';
+    const schoolLogo = settings?.branding?.logo || '';
+    const branchName = branding.branch?.branchName || '';
+
+    const mappings = {
+      '{{student_name}}': `${student.firstName} ${student.lastName}`,
+      '{{father_name}}': student.fatherName || 'N/A',
+      '{{roll_no}}': student.rollNumber || 'N/A',
+      '{{admission_no}}': student.admissionNumber || 'N/A',
+      '{{class}}': student.class?.className || 'N/A',
+      '{{section}}': student.section?.sectionName || 'A',
+      '{{dob}}': student.dob ? new Date(student.dob).toLocaleDateString() : 'N/A',
+      '{{gender}}': student.gender || 'N/A',
+      '{{school_name}}': schoolName,
+      '{{school_address}}': schoolAddress,
+      '{{branch_name}}': branchName,
+      '{{exam_title}}': marks[0].examSchedule?.examTitle || 'Examination',
+      '{{academic_year}}': '2024 - 2025',
+      '{{total_obtained}}': totalObtained,
+      '{{total_max}}': totalMax,
+      '{{percentage}}': percentage,
+      '{{grade}}': finalGrade,
+      '{{result_status}}': resultStatus,
+      '{{subject_table}}': tableHtml,
+      '{{school_logo}}': schoolLogo,
+      '{{school_stamp}}': branding.branch?.stamp || ''
+    };
+
+    Object.keys(mappings).forEach(tag => {
+      const regex = new RegExp(tag, 'g');
+      htmlContent = htmlContent.replace(regex, mappings[tag]);
+    });
+
+    res.status(200).send(htmlContent);
+
+  } catch (error) {
+    console.error('Dynamic Marksheet Parser Error:', error);
+    res.status(200).send(`<div style="text-align: center; padding: 50px;"><h1>Internal Error</h1><p>${error.message}</p></div>`);
+  }
+};
+
 module.exports.Marks = Marks;
-module.exports.GradingSystem = GradingSystem;
-module.exports.OnlineExam = OnlineExam;
+// module.exports.GradingSystem = GradingSystem; // If needed
+// module.exports.OnlineExam = OnlineExam; // If needed

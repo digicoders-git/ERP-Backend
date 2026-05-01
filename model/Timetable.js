@@ -10,11 +10,12 @@ const timetableSchema = new mongoose.Schema({
   classTime: { type: String, trim: true },        // legacy field e.g. "09:00-10:00"
   startTime: { type: String, trim: true },        // e.g. "09:00"
   endTime: { type: String, trim: true },          // e.g. "10:00"
+  periodNumber: { type: Number, required: true },
   subject: { type: String, required: true, trim: true },
   room: { type: String, trim: true },
   classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
   sectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
-  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
   teacherName: { type: String, trim: true },     // stored name directly for easy display
   branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
   client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },

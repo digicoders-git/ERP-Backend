@@ -10,17 +10,21 @@
   "author": "Irshad",
   "license": "ISC",
   "dependencies": {
+    "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
     "express": "^4.22.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^7.8.9",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.2.1",
     "nodemailer": "^6.10.1",
     "qrcode": "^1.5.4",
-    "redis": "^4.7.1"
+    "redis": "^4.7.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

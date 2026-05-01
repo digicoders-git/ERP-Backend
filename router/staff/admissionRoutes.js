@@ -19,7 +19,7 @@ const uploadFields = upload.fields([
 router.post('/add', auth, setStudentHeaders, uploadFields, cloudinaryUpload, admissionController.addAdmission);
 router.get('/all', auth, admissionController.getAllAdmissions);
 router.get('/:id', auth, admissionController.getAdmissionById);
-router.put('/:id', auth, admissionController.updateAdmission);
+router.put('/:id', auth, setStudentHeaders, uploadFields, cloudinaryUpload, admissionController.updateAdmission);
 router.delete('/:id', auth, admissionController.deleteAdmission);
 
 module.exports = router;

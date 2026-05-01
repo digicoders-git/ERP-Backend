@@ -12,12 +12,14 @@ exports.uploadVideoClass = async (req, res) => {
       return res.status(403).json({ message: 'Only teacher admin can upload video classes' });
     }
 
+    const videoUrlToSave = req.file ? (req.file.cloudinaryUrl || req.file.path) : videoUrl;
+
     const videoClass = new VideoClass({
       title,
       subject,
       duration,
       thumbnailUrl,
-      videoUrl,
+      videoUrl: videoUrlToSave,
       class: classId,
       section: sectionId,
       branch: admin.branch,
@@ -127,7 +129,12 @@ exports.updateVideoClass = async (req, res) => {
     if (subject) videoClass.subject = subject;
     if (duration) videoClass.duration = duration;
     if (thumbnailUrl) videoClass.thumbnailUrl = thumbnailUrl;
-    if (videoUrl) videoClass.videoUrl = videoUrl;
+    
+    if (req.file) {
+      videoClass.videoUrl = req.file.cloudinaryUrl || req.file.path;
+    } else if (videoUrl) {
+      videoClass.videoUrl = videoUrl;
+    }
     if (classId) videoClass.class = classId;
     if (sectionId) videoClass.section = sectionId;
 

@@ -122,6 +122,28 @@ exports.addAdmission = async (req, res) => {
       };
     }
 
+    // Document status calculation
+    const missingDocs = [];
+    if (!studentData.profileImage) missingDocs.push('Student Photo');
+    if (!studentData.documents.aadharCard) missingDocs.push('Aadhar Card');
+    if (!studentData.documents.birthCertificate) missingDocs.push('Birth Certificate');
+    if (!studentData.medicalCertificate) missingDocs.push('Medical Certificate');
+    if (!studentData.casteCertificate) missingDocs.push('Caste Certificate');
+    
+    if (hasPreviousEducation === 'yes') {
+      if (!studentData.documents.marksheet) missingDocs.push('Marksheet');
+      if (!studentData.documents.transferCertificate) missingDocs.push('Transfer Certificate');
+      if (!studentData.documents.characterCertificate) missingDocs.push('Character Certificate');
+    }
+
+    if (missingDocs.length > 0) {
+      studentData.verificationStatus = 'partial';
+      studentData.verificationRemarks = `Pending Documents: ${missingDocs.join(', ')}`;
+    } else {
+      studentData.verificationStatus = 'pending';
+      studentData.verificationRemarks = 'All essential documents uploaded.';
+    }
+
     const newStudent = new Student(studentData);
     await newStudent.save();
 
@@ -371,34 +393,45 @@ exports.updateAdmission = async (req, res) => {
       return cleanPath;
     };
 
-    const updateData = {
-      firstName, lastName, email, phone, gender, dob, category,
-      fatherName, motherName,
-      permanentAddress: {
-        address: permanentAddress,
-        city: permanentCity,
-        state: permanentState,
-        pincode: permanentPincode
-      },
-      currentAddress: {
-        address: currentAddress || permanentAddress,
-        city: currentCity || permanentCity,
-        state: currentState || permanentState,
-        pincode: currentPincode || permanentPincode
-      },
-      hasPreviousEducation,
-      class: course,
-      section: section,
-      stream: stream,
-      guardianInfo: {
-        fatherName,
-        motherName,
-        guardianPhone,
-        emergencyPhone: emergencyContact
-      },
-      admissionStatus: 'pending',
-      applicationStatus: 'pending'
+    const updateData = { ...req.body };
+
+    // Handle nested Address objects
+    updateData.permanentAddress = {
+      address: req.body.permanentAddress || student.permanentAddress?.address || '',
+      city: req.body.permanentCity || student.permanentAddress?.city || '',
+      state: req.body.permanentState || student.permanentAddress?.state || '',
+      pincode: req.body.permanentPincode || student.permanentAddress?.pincode || ''
     };
+
+    updateData.currentAddress = {
+      address: req.body.currentAddress || student.currentAddress?.address || '',
+      city: req.body.currentCity || student.currentAddress?.city || '',
+      state: req.body.currentState || student.currentAddress?.state || '',
+      pincode: req.body.currentPincode || student.currentAddress?.pincode || ''
+    };
+
+    // Handle nested Guardian Info
+    updateData.guardianInfo = {
+      fatherName: req.body.fatherName || student.guardianInfo?.fatherName || '',
+      motherName: req.body.motherName || student.guardianInfo?.motherName || '',
+      guardianPhone: req.body.guardianPhone || student.guardianInfo?.guardianPhone || '',
+      emergencyPhone: req.body.emergencyContact || student.guardianInfo?.emergencyPhone || ''
+    };
+
+    // Handle previous education mapping
+    if (req.body.hasPreviousEducation === 'yes') {
+      updateData.previousEducation = {
+        ...(student.previousEducation || {}),
+        previousSchoolName: req.body.prevSchoolName || student.previousEducation?.previousSchoolName || '',
+        previousSchoolAddress: req.body.prevSchoolAddress || student.previousEducation?.previousSchoolAddress || '',
+        previousMarksType: req.body.prevMarksType || student.previousEducation?.previousMarksType || 'percentage',
+        previousPercentage: req.body.prevMarksValue || student.previousEducation?.previousPercentage || ''
+      };
+    }
+
+    // Map class/section if provided
+    if (req.body.class) updateData.class = req.body.class;
+    if (req.body.section) updateData.section = req.body.section;
 
     const photo = getFilePath('studentPhoto');
     if (photo) updateData.profileImage = photo;
@@ -416,7 +449,7 @@ exports.updateAdmission = async (req, res) => {
     const tc = getFilePath('fileTC');
 
     if (marksheet || birthCert || aadhar || characterCert || tc) {
-      updateData.documents = { ...student.documents };
+      updateData.documents = { ...(student.documents || {}) };
       if (marksheet) updateData.documents.marksheet = marksheet;
       if (birthCert) updateData.documents.birthCertificate = birthCert;
       if (aadhar) updateData.documents.aadharCard = aadhar;
@@ -424,20 +457,40 @@ exports.updateAdmission = async (req, res) => {
       if (tc) updateData.documents.transferCertificate = tc;
     }
 
-    if (hasPreviousEducation === 'yes') {
-      updateData.previousEducation = {
-        ...student.previousEducation,
-        previousCourseName: prevCourseName,
-        previousSchoolName: prevSchoolName,
-        previousSchoolAddress: prevSchoolAddress,
-        previousMarksType: prevMarksType,
-        previousPercentage: parseFloat(prevMarksValue) || 0
-      };
+    if (req.body.hasPreviousEducation === 'yes') {
       if (marksheet) updateData.previousEducation.marksheet = marksheet;
       if (characterCert) updateData.previousEducation.characterCertificate = characterCert;
       if (tc) updateData.previousEducation.transferCertificate = tc;
       const migration = getFilePath('fileMigrationCert');
       if (migration) updateData.previousEducation.migrationCertificate = migration;
+    }
+
+    // Recalculate document status after update
+    const missingDocs = [];
+    const finalDocs = updateData.documents || student.documents || {};
+    const finalProfileImage = updateData.profileImage || student.profileImage;
+    const finalMedical = updateData.medicalCertificate || student.medicalCertificate;
+    const finalCaste = updateData.casteCertificate || student.casteCertificate;
+    const finalPrevEdu = updateData.previousEducation || student.previousEducation || {};
+
+    if (!finalProfileImage) missingDocs.push('Student Photo');
+    if (!finalDocs.aadharCard) missingDocs.push('Aadhar Card');
+    if (!finalDocs.birthCertificate) missingDocs.push('Birth Certificate');
+    if (!finalMedical) missingDocs.push('Medical Certificate');
+    if (!finalCaste) missingDocs.push('Caste Certificate');
+    
+    if (req.body.hasPreviousEducation === 'yes' || student.hasPreviousEducation === 'yes') {
+      if (!finalDocs.marksheet && !finalPrevEdu.marksheet) missingDocs.push('Marksheet');
+      if (!finalDocs.transferCertificate && !finalPrevEdu.transferCertificate) missingDocs.push('Transfer Certificate');
+      if (!finalDocs.characterCertificate && !finalPrevEdu.characterCertificate) missingDocs.push('Character Certificate');
+    }
+
+    if (missingDocs.length > 0) {
+      updateData.verificationStatus = 'partial';
+      updateData.verificationRemarks = `Pending Documents: ${missingDocs.join(', ')}`;
+    } else {
+      updateData.verificationStatus = 'pending';
+      updateData.verificationRemarks = 'All essential documents uploaded.';
     }
 
     const updatedStudent = await Student.findByIdAndUpdate(id, { $set: updateData }, { new: true });

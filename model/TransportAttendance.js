@@ -21,6 +21,10 @@ const transportAttendanceSchema = new mongoose.Schema({
     ref: 'Vehicle',
     required: true
   },
+  trip: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Trip'
+  },
   student: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Student'

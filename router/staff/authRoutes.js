@@ -4,33 +4,40 @@ const jwt = require('jsonwebtoken');
 const Staff = require('../../model/Staff');
 const staffAuth = require('../../middleware/staffAuth');
 
-// Staff Login - Simple version (for testing)
+// Staff Login
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required' });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    console.log('Login attempt with email:', email);
+    console.log('=== LOGIN ATTEMPT ===');
+    console.log('Email:', email);
+    console.log('Password:', password);
 
     const staff = await Staff.findOne({ email, status: true })
-      .select('_id name email password branch client')
+      .select('_id name email password branch client designation')
       .lean();
+
+    console.log('Staff found:', !!staff);
 
     if (!staff) {
       console.log('Staff not found with email:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    console.log('Staff found:', staff._id);
+    console.log('Staff password from DB:', staff.password);
+    console.log('Password match:', password === staff.password);
 
-    // Check password if provided, otherwise allow login (for testing)
-    if (password && staff.password && staff.password !== password) {
+    // Direct password comparison (database has plain text)
+    if (password !== staff.password) {
       console.log('Password mismatch');
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    console.log('Password matched, generating token');
 
     // Generate JWT token
     const token = jwt.sign(
@@ -41,7 +48,7 @@ router.post('/login', async (req, res) => {
         branch: staff.branch,
         client: staff.client
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '7d' }
     );
 
@@ -55,7 +62,9 @@ router.post('/login', async (req, res) => {
         name: staff.name,
         email: staff.email,
         branch: staff.branch,
-        client: staff.client
+        client: staff.client,
+        designation: staff.designation,
+        role: 'staff'
       }
     });
   } catch (error) {
@@ -68,7 +77,7 @@ router.post('/login', async (req, res) => {
 router.get('/profile', staffAuth, async (req, res) => {
   try {
     const staff = await Staff.findById(req.userId)
-      .select('_id name email mobile designation department branch client')
+      .select('_id name email mobile designation department branch client profileImage')
       .lean();
 
     if (!staff) {
@@ -85,7 +94,7 @@ router.get('/profile', staffAuth, async (req, res) => {
 router.get('/debug/all-staff', async (req, res) => {
   try {
     const staff = await Staff.find({ status: true })
-      .select('_id name email branch client')
+      .select('_id name email branch client designation password')
       .limit(10)
       .lean();
 

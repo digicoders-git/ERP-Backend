@@ -1,5 +1,6 @@
 const Admin = require('../../model/Admin');
 const Librarian = require('../../model/Librarian');
+const ClientSettings = require('../../model/ClientSettings');
 
 // GET profile
 exports.getProfile = async (req, res) => {
@@ -12,13 +13,18 @@ exports.getProfile = async (req, res) => {
       .populate('branch', 'branchName branchCode')
       .lean();
 
+    // Fetch branding logo from ClientSettings
+    const settings = await ClientSettings.findOne({ branchId: admin.branch }).lean();
+    const logo = settings?.branding?.logo || null;
+
     res.status(200).json({
       success: true,
       data: {
         admin: { id: admin._id, email: admin.email, role: admin.role, status: admin.status },
         librarian: librarian ? {
           ...librarian,
-          librarianId: librarian.staffId
+          librarianId: librarian.staffId,
+          logo: logo
         } : null
       }
     });

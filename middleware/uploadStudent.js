@@ -24,22 +24,25 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
+  const allowedImageTypes = /jpeg|jpg|png|webp/;
+  const allowedDocTypes = /pdf/;
+  
+  const isImage = allowedImageTypes.test(path.extname(file.originalname).toLowerCase()) && allowedImageTypes.test(file.mimetype);
+  const isPDF = allowedDocTypes.test(path.extname(file.originalname).toLowerCase()) && allowedDocTypes.test(file.mimetype);
+
   if (file.fieldname === 'studentPhoto') {
-    const allowedTypes = /jpeg|jpg|png/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) {
+    if (isImage) {
       cb(null, true);
     } else {
-      const error = new Error('Only image files (JPEG/JPG/PNG) are allowed for student photo');
+      const error = new Error('Only image files (JPEG/JPG/PNG/WEBP) are allowed for student photo');
       error.statusCode = 400;
       cb(error);
     }
   } else {
-    if (file.mimetype === 'application/pdf' && path.extname(file.originalname).toLowerCase() === '.pdf') {
+    if (isPDF || isImage) {
       cb(null, true);
     } else {
-      const error = new Error('Only PDF files are allowed for documents');
+      const error = new Error('Only PDF or Image files (JPG/PNG/WEBP) are allowed for documents');
       error.statusCode = 400;
       cb(error);
     }

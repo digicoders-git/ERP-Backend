@@ -18,14 +18,10 @@ exports.applyLeave = async (req, res) => {
     const branch = await getBranch(req.userId);
     if (!branch) return res.status(403).json({ message: 'Access denied' });
 
-    const { staffName, staffId, leaveType, startDate, endDate, reason } = req.body;
+    const { staffName, staffId, studentId, studentName, leaveType, startDate, endDate, reason, status } = req.body;
     
-    if (!staffName || !leaveType || !startDate || !endDate || !reason) {
-      return res.status(400).json({ 
-        message: 'All fields are required',
-        required: ['staffName', 'leaveType', 'startDate', 'endDate', 'reason'],
-        received: { staffName, leaveType, startDate, endDate, reason }
-      });
+    if (!leaveType || !startDate || !endDate || !reason) {
+      return res.status(400).json({ message: 'Missing required fields' });
     }
 
     const start = new Date(startDate);
@@ -36,16 +32,19 @@ exports.applyLeave = async (req, res) => {
 
     const leaveData = {
       branch, 
-      staffName, 
       leaveType, 
       startDate: start, 
       endDate: end, 
       days, 
       reason, 
-      appliedBy: req.userId
+      appliedBy: req.userId,
+      status: status || 'pending'
     };
     
     if (staffId) leaveData.staffId = staffId;
+    if (staffName) leaveData.staffName = staffName;
+    if (studentId) leaveData.studentId = studentId;
+    if (studentName) leaveData.studentName = studentName;
 
     const leave = await Leave.create(leaveData);
 
@@ -68,7 +67,11 @@ exports.getAllLeaves = async (req, res) => {
     if (search) query.staffName = { $regex: search, $options: 'i' };
 
     const [leaves, stats] = await Promise.all([
-      Leave.find(query).sort({ createdAt: -1 }).populate('staffId', 'name profileImage email').lean(),
+      Leave.find(query)
+        .sort({ createdAt: -1 })
+        .populate('staffId', 'name profileImage email')
+        .populate('studentId', 'firstName lastName admissionNumber rollNumber')
+        .lean(),
       Leave.aggregate([
         { $match: { branch } },
         { $group: { _id: '$status', count: { $sum: 1 } } }

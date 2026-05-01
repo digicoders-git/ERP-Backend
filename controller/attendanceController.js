@@ -18,7 +18,10 @@ const getBranch = async (userId) => {
 // Mark Bulk Attendance (students or staff)
 exports.markAttendance = async (req, res) => {
   try {
-    const branch = await getBranch(req.userId);
+    let adminUser = await Admin.findById(req.userId).lean();
+    let staffUser = !adminUser ? await Staff.findById(req.userId).lean() : null;
+    const branch = adminUser?.branch || staffUser?.branch;
+
     if (!branch) return res.status(403).json({ message: 'Access denied' });
 
     let { date, type, records, attendance, classId, sectionId, class: className, section: sectionName } = req.body;
@@ -51,6 +54,35 @@ exports.markAttendance = async (req, res) => {
 
     const attendanceDate = new Date(date);
     attendanceDate.setHours(0, 0, 0, 0);
+
+    // If user is a teacher, verify permissions
+    if (adminUser && adminUser.role === 'teacherAdmin' && type === 'student') {
+      const teacherId = adminUser.teacher;
+      const Teacher = require('../model/Teacher');
+      const teacherProfile = await Teacher.findById(teacherId).lean();
+      
+      let isAllowed = false;
+      if (teacherProfile && teacherProfile.isClassTeacher && 
+          teacherProfile.assignedClass?.toString() === classId?.toString() &&
+          (!sectionId || teacherProfile.assignedSection?.toString() === sectionId?.toString())) {
+        isAllowed = true;
+      } else {
+        // Check if substitute
+        const SubstituteTeacher = require('../model/SubstituteTeacher');
+        const isSubstitute = await SubstituteTeacher.findOne({
+          substituteTeacherId: teacherId,
+          classId,
+          sectionId: sectionId || { $exists: true },
+          startDate: { $lte: attendanceDate },
+          endDate: { $gte: attendanceDate }
+        });
+        if (isSubstitute) isAllowed = true;
+      }
+
+      if (!isAllowed) {
+        return res.status(403).json({ message: 'Not authorized to mark attendance for this class' });
+      }
+    }
 
     // Delete existing attendance for same date/type/class to allow re-marking
     const deleteQuery = { branch, date: attendanceDate, type };
@@ -293,3 +325,147 @@ exports.deleteAttendance = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+// Update Single Attendance Record (Live Status)
+exports.updateAttendance = async (req, res) => {
+  try {
+    const branch = await getBranch(req.userId);
+    if (!branch) return res.status(403).json({ message: 'Access denied' });
+
+    const { id } = req.params;
+    const { status, remark } = req.body;
+
+    const record = await Attendance.findOne({ _id: id, branch });
+    if (!record) return res.status(404).json({ message: 'Record not found' });
+
+    record.status = status || record.status;
+    record.remark = remark !== undefined ? remark : record.remark;
+    
+    // Check if updated by Admin (override)
+    const admin = await Admin.findById(req.userId);
+    if (admin) {
+      record.overriddenBy = req.userId;
+    }
+
+    await record.save();
+    res.status(200).json({ message: 'Attendance updated successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Sync Biometric Data
+exports.syncBiometric = async (req, res) => {
+  try {
+    const branch = await getBranch(req.userId);
+    if (!branch) return res.status(403).json({ message: 'Access denied' });
+
+    const { records, type } = req.body; // records: [{ id, timeIn, date }]
+    if (!records || !Array.isArray(records)) {
+      return res.status(400).json({ message: 'Invalid records format' });
+    }
+
+    let synced = 0;
+    for (const r of records) {
+      const attendanceDate = new Date(r.date);
+      attendanceDate.setHours(0, 0, 0, 0);
+
+      const query = { branch, date: attendanceDate, type };
+      if (type === 'student') query.studentId = r.id;
+      else query.staffId = r.id;
+
+      let existing = await Attendance.findOne(query);
+
+      if (existing) {
+        // If manual exists and no overriddenBy, Biometric can update timeIn and status
+        if (!existing.overriddenBy) {
+          existing.timeIn = r.timeIn;
+          existing.source = 'biometric';
+          existing.status = 'present'; // Can add late logic based on timeIn
+          await existing.save();
+          synced++;
+        }
+      } else {
+        // Create new biometric record
+        await Attendance.create({
+          branch,
+          date: attendanceDate,
+          type,
+          [type === 'student' ? 'studentId' : 'staffId']: r.id,
+          status: 'present',
+          source: 'biometric',
+          timeIn: r.timeIn
+        });
+        synced++;
+      }
+    }
+
+    res.status(200).json({ message: `Biometric sync completed: ${synced} records updated` });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const SubstituteTeacher = require('../model/SubstituteTeacher');
+
+// Assign Substitute Teacher
+exports.assignSubstitute = async (req, res) => {
+  try {
+    const branch = await getBranch(req.userId);
+    if (!branch) return res.status(403).json({ message: 'Access denied' });
+
+    const { classId, sectionId, substituteTeacherId, startDate, endDate, reason } = req.body;
+
+    if (!classId || !sectionId || !substituteTeacherId || !startDate || !endDate) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const sub = await SubstituteTeacher.create({
+      branch,
+      classId,
+      sectionId,
+      substituteTeacherId,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      reason,
+      assignedBy: req.userId
+    });
+
+    res.status(201).json({ message: 'Substitute assigned successfully', substitute: sub });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get All Substitute Assignments
+exports.getSubstitutes = async (req, res) => {
+  try {
+    const branch = await getBranch(req.userId);
+    if (!branch) return res.status(403).json({ message: 'Access denied' });
+
+    const { classId, sectionId, active } = req.query;
+    const query = { branch };
+
+    if (classId) query.classId = classId;
+    if (sectionId) query.sectionId = sectionId;
+
+    if (active === 'true') {
+      const now = new Date();
+      query.startDate = { $lte: now };
+      query.endDate = { $gte: now };
+    }
+
+    const substitutes = await SubstituteTeacher.find(query)
+      .populate('substituteTeacherId', 'name email profileImage')
+      .populate('classId', 'className')
+      .populate('sectionId', 'sectionName')
+      .populate('assignedBy', 'email name')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ substitutes });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+

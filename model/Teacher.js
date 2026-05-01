@@ -77,7 +77,16 @@ const teacherSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Section',
     default: null
-  }
+  },
+  isClassTeacher: {
+    type: Boolean,
+    default: false
+  },
+  teachingAssignments: [{
+    class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
+    section: { type: mongoose.Schema.Types.ObjectId, ref: 'Section' },
+    subjects: [{ type: String, trim: true }]
+  }]
 }, { timestamps: true });
 
 teacherSchema.index({ branch: 1, status: 1 });

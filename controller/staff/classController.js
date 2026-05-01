@@ -27,17 +27,17 @@ exports.getAllClasses = async (req, res) => {
       .lean();
 
     const classDetails = await Promise.all(classes.map(async (cls) => {
-      const [sections, studentCount, teachers] = await Promise.all([
+      const [sections, studentCount, classTeacher] = await Promise.all([
         Section.find({ assignToClass: cls._id }).select('sectionName').lean(),
         Student.countDocuments({ class: cls._id, status: 'active' }),
-        Teacher.find({ assignedClasses: cls._id }).select('name subject').lean()
+        Teacher.findOne({ assignedClass: cls._id, isClassTeacher: true }).select('name email').lean()
       ]);
 
       return {
         ...cls,
         sections,
         studentCount,
-        teachers
+        classTeacher
       };
     }));
 
@@ -52,6 +52,9 @@ exports.getAllClasses = async (req, res) => {
 exports.getClassById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid class ID format' });
+    }
     const { branch } = await getBranchClient(req.userId);
 
     const classInfo = await Class.findOne({ _id: id, branch }).lean();
@@ -66,8 +69,8 @@ exports.getClassById = async (req, res) => {
         .populate('section', 'sectionName')
         .sort({ rollNumber: 1 })
         .lean(),
-      Teacher.find({ assignedClasses: id })
-        .select('name email mobile subject profileImage')
+      Teacher.find({ assignedClass: id })
+        .select('name email mobile subject profileImage isClassTeacher')
         .lean()
     ]);
 
@@ -165,6 +168,23 @@ exports.getClassStatistics = async (req, res) => {
     });
   } catch (error) {
     console.error('getClassStatistics error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get Sections by Class ID
+exports.getSectionsByClass = async (req, res) => {
+  try {
+    const { classId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(classId)) {
+      return res.status(400).json({ message: 'Invalid class ID format' });
+    }
+    const { branch } = await getBranchClient(req.userId);
+
+    const sections = await Section.find({ assignToClass: classId }).lean();
+    res.status(200).json({ sections: sections || [] });
+  } catch (error) {
+    console.error('getSectionsByClass error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

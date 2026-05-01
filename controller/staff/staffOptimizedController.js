@@ -1,4 +1,8 @@
 const Staff = require('../../model/Staff');
+const Teacher = require('../../model/Teacher');
+const Driver = require('../../model/Driver');
+const Warden = require('../../model/Warden');
+const Librarian = require('../../model/Librarian');
 const Admin = require('../../model/Admin');
 const Attendance = require('../../model/Attendance');
 const Leave = require('../../model/Leave');
@@ -11,28 +15,58 @@ exports.getAllStaff = async (req, res) => {
     const adminBranch = req.user?.branch ? new mongoose.Types.ObjectId(req.user.branch) : null;
     const adminClient = req.user?.client ? new mongoose.Types.ObjectId(req.user.client) : null;
 
+    const role = req.query.role || 'staff';
+    let TargetModel = Staff;
+    
+    if (role === 'teacher') TargetModel = Teacher;
+    else if (role === 'driver') TargetModel = Driver;
+    else if (role === 'warden') TargetModel = Warden;
+    else if (role === 'librarian') TargetModel = Librarian;
+
     const query = {};
     if (adminBranch) query.branch = adminBranch;
     else if (branch) query.branch = new mongoose.Types.ObjectId(branch);
     else if (adminClient) query.client = adminClient;
-    if (status !== 'all') query.status = status === 'active';
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { mobile: { $regex: search, $options: 'i' } }
-      ];
+    
+    if (status !== 'all') {
+      const isTrue = status === 'active';
+      if (role === 'warden') query.status = isTrue ? 'active' : 'inactive';
+      else query.status = isTrue;
     }
 
-    const [staff, total] = await Promise.all([
-      Staff.find(query)
-        .select('name email mobile qualification experience salary status createdAt')
+    if (search) {
+      const searchFields = [];
+      if (role === 'warden') {
+        searchFields.push({ wardenName: { $regex: search, $options: 'i' } });
+        searchFields.push({ mobileNumber: { $regex: search, $options: 'i' } });
+      } else {
+        searchFields.push({ name: { $regex: search, $options: 'i' } });
+        searchFields.push({ mobile: { $regex: search, $options: 'i' } });
+        if (role === 'driver') searchFields.push({ mobileNo: { $regex: search, $options: 'i' } });
+      }
+      query.$or = searchFields;
+    }
+
+    const [rawStaff, total] = await Promise.all([
+      TargetModel.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
         .lean(),
-      Staff.countDocuments(query)
+      TargetModel.countDocuments(query)
     ]);
+
+    // Standardize the output
+    const staff = rawStaff.map(s => ({
+      _id: s._id,
+      name: s.name || s.wardenName || s.librarianName || 'N/A',
+      email: s.email,
+      mobile: s.mobile || s.mobileNo || s.mobileNumber || 'N/A',
+      staffId: s.staffId || s.customId || s.employeeId || s.licenseNo || s._id.toString().slice(-8).toUpperCase(),
+      profileImage: s.profileImage || s.profilePic || s.photo,
+      role: role,
+      status: s.status === true || s.status === 'active'
+    }));
 
     res.status(200).json({
       success: true,

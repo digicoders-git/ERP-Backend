@@ -26,6 +26,9 @@ router.get('/parents', auth, ctrl.getParentData);
 // Reports
 router.get('/reports', auth, ctrl.getReports);
 
+// ID Card Generation
+router.post('/generate-id-cards', auth, ctrl.generateIdCards);
+
 // Profile
 router.get('/profile', auth, ctrl.getProfile);
 router.put('/profile', auth, ctrl.updateProfile);

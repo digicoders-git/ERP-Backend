@@ -38,6 +38,11 @@ const studentSchema = new mongoose.Schema({
   rollNumber: {
     type: String
   },
+  biometricId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   gender: {
     type: String,
     enum: ['male', 'female', 'other'],
@@ -145,7 +150,7 @@ const studentSchema = new mongoose.Schema({
   },
   verificationStatus: {
     type: String,
-    enum: ['pending', 'verified', 'rejected'],
+    enum: ['pending', 'verified', 'rejected', 'partial'],
     default: 'pending'
   },
   verificationRemarks: {

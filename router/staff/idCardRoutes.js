@@ -1,10 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const idCardController = require('../../controller/staff/idCardController');
-const auth = require('../../middleware/staffAuth');
+const flexibleAuth = require('../../middleware/flexibleAuth');
 
-router.get('/generate/:studentId', auth, idCardController.generateIdCard);
-router.get('/bulk', auth, idCardController.generateBulkIdCards);
-router.get('/students', auth, idCardController.getStudentsForIdCard);
+router.post('/generate', flexibleAuth, idCardController.generateIdCards);
 
 module.exports = router;

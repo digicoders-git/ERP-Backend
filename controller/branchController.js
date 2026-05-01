@@ -82,14 +82,14 @@ exports.createBranch = async (req, res) => {
     });
     await branch.save();
 
-    // Create Branch Admin
+    // Create Branch Admin with panels from plan
     const branchAdmin = new Admin({
       email,
       password,
       role: 'branchAdmin',
       client: client._id,
       branch: branch._id,
-      allowedPanels: [],
+      allowedPanels: client.purchasedPanels,  // ✅ FROM PLAN
       status: true
     });
     await branchAdmin.save();

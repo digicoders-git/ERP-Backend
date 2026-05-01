@@ -69,6 +69,7 @@ exports.login = async (req, res) => {
       );
 
       const { password: _, ...userData } = user;
+      userData.children = userData.children || [];
       return res.status(200).json({ success: true, message: 'Login successful', token, user: userData });
     }
 
@@ -91,6 +92,7 @@ exports.login = async (req, res) => {
     );
 
     const { password: _, ...userData } = user;
+    userData.children = userData.children || [];
     res.status(200).json({ success: true, message: 'Login successful', token, user: userData });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -147,13 +149,14 @@ exports.getDashboard = async (req, res) => {
       const sid = new mongoose.Types.ObjectId(studentId);
       const today = new Date(); today.setHours(0, 0, 0, 0);
 
-      const [todayAttendance, pendingFees, issuedBooks, upcomingAssignments, totalAttendance, upcomingEvents, totalAttendanceHistory, recentPayments] = await Promise.all([
+      const [todayAttendance, pendingFees, issuedBooksCount, approvedRequestsCount, upcomingAssignments, totalAttendance, upcomingEvents, totalAttendanceHistory, recentPayments] = await Promise.all([
         Attendance.findOne({ studentId: sid, date: { $gte: today }, type: 'student' }).lean(),
         FeeCollection.aggregate([
           { $match: { student: sid, status: { $in: ['pending', 'partial'] } } },
           { $group: { _id: null, total: { $sum: '$balance' } } }
         ]),
         BookIssue.countDocuments({ member: sid, status: { $in: ['issued', 'overdue'] } }),
+        BookRequest.countDocuments({ student: sid, status: { $regex: /^approved$/i } }),
         Assignment.countDocuments({ 
           branch, 
           class: student.class?._id, 
@@ -213,7 +216,7 @@ exports.getDashboard = async (req, res) => {
           stats: { 
             todayAttendance: todayAttendance?.status || 'Not Marked', 
             pendingFees: pendingFees[0]?.total || 0, 
-            issuedBooks, 
+            issuedBooks: issuedBooksCount + approvedRequestsCount, 
             upcomingAssignments,
             attendancePercentage: attPercentage
           },
@@ -504,24 +507,45 @@ exports.getLibrary = async (req, res) => {
 
     const sid = new mongoose.Types.ObjectId(studentId);
 
-    const issues = await BookIssue.find({ member: sid })
-      .populate('book', 'title author ISBN category')
-      .sort({ issueDate: -1 })
-      .lean();
+    const [issues, approvedRequests] = await Promise.all([
+      BookIssue.find({ member: sid })
+        .populate('book', 'title author ISBN category')
+        .sort({ issueDate: -1 })
+        .lean(),
+      BookRequest.find({ student: sid, status: { $regex: /^approved$/i } })
+        .populate('book', 'title author ISBN category')
+        .lean()
+    ]);
 
-    const books = issues.map(i => ({
+    const formattedIssues = issues.map(i => ({
       id: i._id,
-      bookName: i.book?.title || '',
-      author: i.book?.author || '',
-      category: i.book?.category || '',
-      issueDate: i.issueDate?.toISOString().split('T')[0],
-      dueDate: i.dueDate?.toISOString().split('T')[0],
-      returnDate: i.returnDate?.toISOString().split('T')[0] || null,
+      bookId: i.book?._id,
+      bookName: i.book?.title || 'Unknown',
+      author: i.book?.author || 'N/A',
+      isbn: i.book?.ISBN || 'N/A',
+      category: i.book?.category || 'General',
+      issueDate: i.issueDate ? new Date(i.issueDate).toLocaleDateString('en-GB') : 'N/A',
+      dueDate: i.dueDate ? new Date(i.dueDate).toLocaleDateString('en-GB') : 'N/A',
+      returnDate: i.returnDate ? new Date(i.returnDate).toLocaleDateString('en-GB') : null,
       status: i.status === 'returned' ? 'Returned' : i.status === 'overdue' ? 'Overdue' : 'Issued',
       fine: i.fine || 0
     }));
 
-    res.status(200).json({ success: true, data: books });
+    const formattedRequests = approvedRequests.map(r => ({
+      id: r._id,
+      bookId: r.book?._id,
+      bookName: r.bookTitle || r.book?.title || 'Unknown',
+      author: r.book?.author || 'N/A',
+      category: r.book?.category || 'General',
+      issueDate: 'N/A',
+      dueDate: 'N/A',
+      returnDate: null,
+      status: 'Approved',
+      fine: 0,
+      isRequest: true
+    }));
+
+    res.status(200).json({ success: true, data: [...formattedRequests, ...formattedIssues] });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -1391,26 +1415,46 @@ exports.applyLeave = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format' });
+    }
+    if (end < start) {
+      return res.status(400).json({ message: 'End date cannot be before start date' });
+    }
+
+    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
     const Leave = require('../model/Leave');
     const sid = studentId || user.studentId;
+
+    if (!sid) {
+      return res.status(400).json({ message: 'Student ID is required' });
+    }
 
     const leave = new Leave({
       studentId: sid,
       leaveType,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: start,
+      endDate: end,
+      days,
       reason,
       status: 'pending',
       appliedBy: user._id,
       branch: user.branch,
-      client: user.client,
-      createdAt: new Date()
+      client: user.client
     });
 
     await leave.save();
-    res.status(201).json({ success: true, message: 'Leave application submitted', data: leave });
+    res.status(201).json({ success: true, message: 'Leave application submitted successfully', data: leave });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Apply Leave Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.name === 'ValidationError' ? 'Validation Error' : 'Server error', 
+      error: error.message 
+    });
   }
 };
 

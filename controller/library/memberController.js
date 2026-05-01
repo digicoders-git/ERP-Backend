@@ -11,9 +11,27 @@ const getAdmin = async (adminId) => {
 // Add Member
 exports.addMember = async (req, res) => {
   try {
-    const { name, email, phone, memberId, joiningDate, status, memberType, address, branch, school } = req.body;
+    const { name, email, phone, memberId, joiningDate, status, memberType, address, branch, school, studentId, validTill } = req.body;
     const admin = await getAdmin(req.userId);
     if (!admin) return res.status(403).json({ success: false, message: 'Only library admin can add members' });
+
+    // Check if student is already a member
+    if (studentId) {
+      const existingMember = await LibraryMember.findOne({ studentId, branch: admin.branch });
+      if (existingMember) {
+        return res.status(400).json({ success: false, message: 'This student is already a library member.' });
+      }
+    }
+
+    const branchToUse = branch || admin.branch;
+    const clientToUse = school || admin.client;
+
+    if (!branchToUse || !clientToUse) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Admin branch or school information is missing. Please contact system administrator.' 
+      });
+    }
 
     const member = new LibraryMember({
       name, email, phone, memberId,
@@ -21,14 +39,17 @@ exports.addMember = async (req, res) => {
       status: status === 'Active' || status === true,
       memberType: memberType || 'General',
       address: address || '',
-      branch: branch || admin.branch,
-      client: school || admin.client,
+      validTill: validTill || null,
+      studentId: studentId || null,
+      branch: branchToUse,
+      client: clientToUse,
       createdBy: req.userId
     });
 
     await member.save();
     res.status(201).json({ success: true, message: 'Member added successfully', data: member });
   } catch (error) {
+    console.error('Error in addMember:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
@@ -42,59 +63,73 @@ exports.getAllMembers = async (req, res) => {
     if (!admin) return res.status(403).json({ success: false, message: 'Only library admin can view members' });
 
     const searchQuery = { branch: admin.branch };
-    const studentSearchQuery = { branch: admin.branch };
-    
+
     if (search) {
       searchQuery.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { memberId: { $regex: search, $options: 'i' } }
       ];
-      studentSearchQuery.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { admissionNumber: { $regex: search, $options: 'i' } }
-      ];
     }
 
-    const [members, students, totalMembers, totalStudents] = await Promise.all([
-      LibraryMember.find(searchQuery).select('-createdBy').lean(),
-      Student.find(studentSearchQuery).select('firstName lastName email admissionNumber rollNumber status').lean(),
-      LibraryMember.countDocuments(searchQuery),
-      Student.countDocuments(studentSearchQuery)
+    const [members, total] = await Promise.all([
+      LibraryMember.find(searchQuery)
+        .populate({
+          path: 'studentId',
+          select: 'firstName lastName email phone mobile admissionNumber rollNumber dob profileImage stream class currentAddress',
+          populate: { path: 'class', select: 'className' }
+        })
+        .select('-createdBy')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      LibraryMember.countDocuments(searchQuery)
     ]);
 
-    const formattedMembers = members.map(member => ({
-      _id: member._id,
-      name: member.name,
-      email: member.email,
-      id: member.memberId || `MEM${member._id.toString().slice(-6).toUpperCase()}`,
-      status: member.status ? 'Active' : 'Inactive',
-      memberType: 'LibraryMember',
-      address: member.address || ''
-    }));
+    const formatDate = (dateValue) => {
+      if (!dateValue) return 'N/A';
+      const d = new Date(dateValue);
+      if (isNaN(d.getTime())) return 'N/A';
+      return d.toISOString().split('T')[0];
+    };
 
-    const formattedStudents = students.map(student => ({
-      _id: student._id,
-      name: `${student.firstName} ${student.lastName}`.trim(),
-      email: student.email,
-      id: student.admissionNumber || student.rollNumber || 'STU-N/A',
-      status: (student.status === 'active' || student.status === 'Active') ? 'Active' : 'Inactive',
-      memberType: 'Student',
-      address: student.address || ''
-    }));
+    const formattedMembers = members.map(member => {
+      const isStudent = !!member.studentId;
+      const student = member.studentId;
+      
+      // Debug log to see what's being fetched
+      if (isStudent && !student.phone) {
+        console.log(`Missing phone for student ${student._id}:`, Object.keys(student));
+      }
 
-    const allMembers = [...formattedMembers, ...formattedStudents];
-    const total = totalMembers + totalStudents;
-
-    // Manual pagination for combined results
-    const paginatedMembers = allMembers.slice(skip, skip + parseInt(limit));
+      return {
+        _id: member._id,
+        name: isStudent ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : member.name,
+        email: isStudent ? student.email : member.email,
+        phone: isStudent ? (student.phone || student.mobile || 'N/A') : (member.phone || 'N/A'),
+        id: isStudent ? (student.admissionNumber || student.rollNumber) : (member.memberId || `MEM${member._id.toString().slice(-6).toUpperCase()}`),
+        status: member.status ? 'Active' : 'Inactive',
+        memberType: member.memberType || (isStudent ? 'Student' : 'General'),
+        address: isStudent ? (student.address || (student.currentAddress ? `${student.currentAddress.address || ''}, ${student.currentAddress.city || ''}` : 'N/A')) : (member.address || 'N/A'),
+        class: isStudent ? (student.class?.className || 'N/A') : 'N/A',
+        stream: isStudent ? (student.stream || '') : '',
+        dob: isStudent ? formatDate(student.dob) : 'N/A',
+        validTill: member.validTill ? formatDate(member.validTill) : 'Lifetime',
+        profileImage: isStudent ? (student.profileImage || null) : null,
+        joinDate: formatDate(member.joiningDate || member.createdAt)
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: paginatedMembers,
-      pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / limit) }
+      data: formattedMembers,
+      pagination: { 
+        total, 
+        page: parseInt(page), 
+        limit: parseInt(limit), 
+        totalPages: Math.ceil(total / limit) 
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -120,7 +155,7 @@ exports.getMemberById = async (req, res) => {
 // Update Member
 exports.updateMember = async (req, res) => {
   try {
-    const { name, email, phone, memberId, joiningDate, status, memberType, address } = req.body;
+    const { name, email, phone, memberId, joiningDate, status, memberType, address, validTill } = req.body;
     const admin = await getAdmin(req.userId);
     if (!admin) return res.status(403).json({ success: false, message: 'Only library admin can update members' });
 
@@ -136,6 +171,7 @@ exports.updateMember = async (req, res) => {
     if (status !== undefined) member.status = status === 'Active' || status === true;
     if (memberType) member.memberType = memberType;
     if (address !== undefined) member.address = address;
+    if (validTill !== undefined) member.validTill = validTill || null;
 
     await member.save();
     res.status(200).json({ success: true, message: 'Member updated successfully', data: member });

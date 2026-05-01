@@ -3,11 +3,18 @@ const router = express.Router();
 const examController = require('../../controller/staff/examController');
 const flexibleAuth = require('../../middleware/flexibleAuth');
 
+// Exam Types
+router.get('/exam-types', flexibleAuth, examController.getExamTypes);
+router.get('/exam-types/:examTypeId/marksheet', flexibleAuth, examController.getMarksheetTemplate);
+router.get('/branding', flexibleAuth, examController.getBranding);
+router.get('/debug/all-exam-types', examController.debugAllExamTypes);
+
 // Marks Management
 router.post('/marks/add', flexibleAuth, examController.addMarks);
 router.get('/marks', flexibleAuth, examController.getMarksByExam);
 router.get('/marks/history', flexibleAuth, examController.getAllMarksHistory);
 router.get('/marks/student/:studentId', flexibleAuth, examController.getStudentMarksReport);
+router.get('/marksheet/dynamic', flexibleAuth, examController.getParsedDynamicMarksheet);
 
 // Grading System
 router.post('/grading', flexibleAuth, examController.createGrading);

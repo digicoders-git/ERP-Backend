@@ -41,8 +41,15 @@ const setAdminHeaders = (req, res, next) => {
   next();
 };
 
+const setClientSettingsHeaders = (req, res, next) => {
+  req.headers['x-panel-name'] = 'client-settings';
+  req.headers['x-category-name'] = 'branding';
+  next();
+};
+
 module.exports = {
   uploadAdmin,
   setAdminHeaders,
+  setClientSettingsHeaders,
   cloudinaryUpload
 };

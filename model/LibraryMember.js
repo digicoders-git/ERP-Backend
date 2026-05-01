@@ -7,6 +7,10 @@ const libraryMemberSchema = new mongoose.Schema({
   phone: { type: String, trim: true },
   joiningDate: { type: Date, required: true },
   status: { type: Boolean, default: true },
+  memberType: { type: String, default: 'General' },
+  address: { type: String },
+  validTill: { type: Date },
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', sparse: true },
   branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
   client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }

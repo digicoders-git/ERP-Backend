@@ -1,6 +1,7 @@
 const Student = require('../../model/Student');
 const Staff = require('../../model/Staff');
 const Admin = require('../../model/Admin');
+const IDCard = require('../../model/IDCard');
 const Approval = require('../../model/Approval');
 const StudentDocument = require('../../model/StudentDocument');
 
@@ -99,6 +100,45 @@ exports.getStudentProfile = async (req, res) => {
       student: formattedStudent 
     });
   } catch (error) {
+    console.error('getStudentProfile error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get Students by Class and Section
+exports.getStudentsBySection = async (req, res) => {
+  try {
+    const { classId, sectionId, page = 1, limit = 50 } = req.query;
+    const { branch } = await getBranchClient(req.userId);
+
+    const skip = (page - 1) * limit;
+
+    const query = { branch, status: 'active' };
+    if (classId) query.class = classId;
+    if (sectionId) query.section = sectionId;
+
+    const [students, total] = await Promise.all([
+      Student.find(query)
+        .populate('class', 'className')
+        .populate('section', 'sectionName')
+        .sort({ rollNumber: 1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      Student.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      students,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('getStudentsBySection error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -168,23 +208,25 @@ exports.verifyStudent = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    student.verificationStatus = status;
-    student.verificationRemarks = remarks;
-    student.verifiedBy = req.userId;
-    student.verifiedAt = new Date();
+    const updateData = {
+      verificationStatus: status,
+      verificationRemarks: remarks,
+      verifiedBy: req.userId,
+      verifiedAt: new Date()
+    };
 
     if (status === 'verified') {
-      student.applicationStatus = 'approved';
+      updateData.applicationStatus = 'approved';
     } else if (status === 'rejected') {
-      student.applicationStatus = 'rejected';
-      student.admissionStatus = 'rejected';
+      updateData.applicationStatus = 'rejected';
+      updateData.admissionStatus = 'rejected';
     }
 
-    await student.save();
+    const updatedStudent = await Student.findByIdAndUpdate(id, { $set: updateData }, { new: true });
 
     res.status(200).json({ 
       message: 'Student verification updated successfully',
-      student 
+      student: updatedStudent 
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -281,20 +323,48 @@ exports.enrollStudent = async (req, res) => {
       });
     }
 
-    student.admissionNumber = admissionNumber;
-    student.rollNumber = rollNumber;
-    student.class = classId;
-    student.section = section;
-    student.status = 'active';
-    student.applicationStatus = 'enrolled';
-    student.enrolledAt = new Date();
-    student.enrolledBy = req.userId;
+    const updateData = {
+      admissionNumber,
+      rollNumber,
+      class: classId,
+      section,
+      status: 'active',
+      applicationStatus: 'enrolled',
+      enrolledAt: new Date(),
+      enrolledBy: req.userId
+    };
 
-    await student.save();
+    const updatedStudent = await Student.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+
+    // Generate ID Card
+    const cardNumber = `STU-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const idCard = new IDCard({
+      roleType: 'student',
+      studentId: updatedStudent._id,
+      cardNumber,
+      name: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
+      email: updatedStudent.email,
+      mobile: updatedStudent.mobile,
+      profileImage: updatedStudent.profileImage,
+      studentInfo: {
+        rollNumber: updatedStudent.rollNumber,
+        class: updatedStudent.class?.className || 'N/A',
+        section: updatedStudent.section?.sectionName || 'N/A',
+        fatherName: updatedStudent.fatherName || 'N/A',
+        dob: updatedStudent.dob ? new Date(updatedStudent.dob).toISOString().split('T')[0] : 'N/A',
+        bloodGroup: updatedStudent.bloodGroup || 'N/A'
+      },
+      issueDate: new Date(),
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      status: 'active',
+      client: updatedStudent.client,
+      branch: updatedStudent.branch
+    });
+    await idCard.save();
 
     res.status(200).json({ 
       message: 'Student enrolled successfully',
-      student 
+      student: updatedStudent 
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

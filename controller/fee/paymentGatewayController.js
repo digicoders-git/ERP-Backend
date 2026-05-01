@@ -1,6 +1,7 @@
 const FeeCollection = require('../../model/FeeCollection');
 const Student = require('../../model/Student');
 const Admin = require('../../model/Admin');
+const ClientSettings = require('../../model/ClientSettings');
 const { successResponse, errorResponse } = require('../../responseFormatter');
 const crypto = require('crypto');
 
@@ -473,6 +474,8 @@ exports.generateReceipt = async (req, res) => {
 
     if (!feeRecord) return errorResponse(res, 'Fee record not found', 404);
 
+    const settings = await ClientSettings.findOne({ branchId: feeRecord.branch?._id || feeRecord.branch }).select('branding.logo').lean();
+
     const receipt = {
       receiptNumber: `REC-${Date.now()}`,
       date: feeRecord.paymentDate,
@@ -488,7 +491,8 @@ exports.generateReceipt = async (req, res) => {
         name: feeRecord.branch?.branchName || 'School Name',
         address: feeRecord.branch?.address || 'School Address',
         phone: feeRecord.branch?.phone || 'N/A',
-        email: feeRecord.branch?.email || 'N/A'
+        email: feeRecord.branch?.email || 'N/A',
+        logo: settings?.branding?.logo || feeRecord.branch?.logo
       },
       payment: {
         feeType: feeRecord.feeType,

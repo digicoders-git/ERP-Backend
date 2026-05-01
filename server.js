@@ -3,9 +3,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
 const connectDB = require('./config/db');
 const errorHandler = require('./errorHandler');
 const { initCache } = require('./utils/cache');
+const { initSocket } = require('./config/socket');
 
 // All route imports...
 const adminRoutes = require('./router/adminRoutes');
@@ -45,6 +47,7 @@ const gpsTrackingRoutes = require('./router/transport/gpsTrackingRoutes');
 const transportPanelRoutes = require('./router/transport/transportPanelRoutes');
 const driverLoginRoutes = require('./router/transport/driverLoginRoutes');
 const transportAttendanceRoutes = require('./router/transport/transportAttendanceRoutes');
+const tripRoutes = require('./router/transport/tripRoutes');
 
 // All other routes...
 const staffAdmissionRoutes = require('./router/staff/admissionRoutes');
@@ -72,6 +75,13 @@ const staffDocumentRoutes = require('./router/staff/documentRoutes');
 const staffNotificationRoutes = require('./router/staff/notificationRoutes');
 const staffTimetableRoutes = require('./router/staff/timetableRoutes');
 const staffFeeAdminRoutes = require('./router/staff/feeAdminRoutes');
+const staffResultImportRoutes = require('./router/staff/resultImportRoutes');
+const staffSubstituteRoutes = require('./router/staff/substituteRoutes');
+const staffAttendanceConfigRoutes = require('./router/staff/attendanceConfigRoutes');
+const staffAttendanceRoutes = require('./router/staff/staffAttendanceRoutes');
+const attendanceUploadRoutes = require('./router/staff/attendanceUploadRoutes');
+const attendanceAppRoutes = require('./router/student/attendanceAppRoutes');
+const biometricSyncRoutes = require('./router/staff/biometricSyncRoutes');
 
 const feeStructureRoutes = require('./router/fee/feeStructureRoutes');
 const feeAdminRoutes = require('./router/fee/feeAdminRoutes');
@@ -121,11 +131,16 @@ const teacherPerformanceEvaluationRoutes = require('./router/teacher/performance
 const admissionRoutes = require('./router/admissionRoutes');
 const branchDashboardRoutes = require('./router/branchDashboardRoutes');
 const branchReportsRoutes = require('./router/branchReportsRoutes');
+const examTypeRoutes = require('./router/examTypeRoutes');
+const marksheetTemplateRoutes = require('./router/marksheetTemplateRoutes');
+const templateMappingRoutes = require('./router/templateMappingRoutes');
+const resultImportRoutes = require('./router/resultImportRoutes');
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 connectDB();
 initCache().catch(err => console.warn('Cache initialization skipped:', err.message));
@@ -158,6 +173,10 @@ app.use('/api/route-stop', routeStopRoutes);
 app.use('/api/route-charge', routeChargeRoutes);
 app.use('/api/transport-assignment', transportAssignmentRoutes);
 app.use('/api/transport-allocation', transportAllocationRoutes);
+app.use('/api/exam-type', examTypeRoutes);
+app.use('/api/marksheet-template', marksheetTemplateRoutes);
+app.use('/api/template-mapping', templateMappingRoutes);
+app.use('/api/result', resultImportRoutes);
 
 // Transport Panel APIs - WITH ATTENDANCE
 app.use('/api/transport-panel/driver', driverPanelRoutes);
@@ -166,6 +185,7 @@ app.use('/api/transport-panel/complaints', driverComplaintRoutes);
 app.use('/api/transport-panel/salary-docs', salaryDocumentsRoutes);
 app.use('/api/transport-panel/gps', gpsTrackingRoutes);
 app.use('/api/transport-panel/attendance', transportAttendanceRoutes);
+app.use('/api/transport-panel/trip', tripRoutes);
 app.use('/api/transport', transportPanelRoutes);
 app.use('/api/driver-auth', driverLoginRoutes);
 
@@ -196,6 +216,15 @@ app.use('/api/staff-panel/documents', staffDocumentRoutes);
 app.use('/api/staff-panel/notifications', staffNotificationRoutes);
 app.use('/api/staff-panel/timetable', staffTimetableRoutes);
 app.use('/api/staff-panel/fee-admin', staffFeeAdminRoutes);
+app.use('/api/staff-panel/result', staffResultImportRoutes);
+app.use('/api/staff-panel/substitute', staffSubstituteRoutes);
+app.use('/api/staff-panel/attendance-config', staffAttendanceConfigRoutes);
+app.use('/api/staff-panel/attendance-staff', staffAttendanceRoutes);
+app.use('/api/staff-panel/attendance-upload', attendanceUploadRoutes);
+app.use('/api/student-panel/attendance', attendanceAppRoutes);
+app.use('/api/biometric', biometricSyncRoutes);
+app.use('/api/staff-panel/staff-optimized', require('./router/staff/staffOptimizedRoutes'));
+app.use('/api/staff-panel/teacher-optimized', require('./router/staff/teacherOptimizedRoutes'));
 
 app.use('/api/fee-panel/fee-structure', feeStructureRoutes);
 app.use('/api/fee-panel/fee-admin', feeAdminRoutes);
@@ -256,6 +285,7 @@ const alumniRoutes = require('./router/alumniRoutes');
 const eventRoutes = require('./router/eventRoutes');
 const staffQuizRoutes = require('./router/staffQuizRoutes');
 
+app.use('/api/timetable', staffTimetableRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/fee-report', feeReportRoutes);
@@ -323,6 +353,11 @@ app.use('/api/parent-student', parentStudentRoutes);
 const adminPanelRoutes = require('./router/adminPanelRoutes');
 app.use('/api/school-admin', adminPanelRoutes);
 
+const clientSettingsRoutes = require('./router/clientSettingsRoutes');
+const publicRoutes = require('./router/publicRoutes');
+app.use('/api/client-settings', clientSettingsRoutes);
+app.use('/api/public', publicRoutes);
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { 
   setHeaders: (res, path) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -345,6 +380,9 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5002;
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

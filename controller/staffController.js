@@ -1,5 +1,6 @@
 const Staff = require('../model/Staff');
 const Admin = require('../model/Admin');
+const IDCard = require('../model/IDCard');
 const path = require('path');
 const fs = require('fs');
 
@@ -16,6 +17,15 @@ exports.createStaff = async (req, res) => {
     const branchAdmin = await Admin.findById(req.userId).populate('branch');
     if (!branchAdmin || branchAdmin.role !== 'branchAdmin') {
       return res.status(403).json({ message: 'Only branch admin can create staff' });
+    }
+
+    // Ensure branch admin has 'staff' panel access
+    if (!branchAdmin.allowedPanels || !branchAdmin.allowedPanels.includes('staff')) {
+      branchAdmin.allowedPanels = branchAdmin.allowedPanels || [];
+      if (!branchAdmin.allowedPanels.includes('staff')) {
+        branchAdmin.allowedPanels.push('staff');
+        await branchAdmin.save();
+      }
     }
 
     // Check if email already exists in Admin
@@ -56,9 +66,29 @@ exports.createStaff = async (req, res) => {
       createdBy: req.userId,
       status: true
     });
-    await staff.save();
-
-    // Create Staff Admin
+    // Generate ID Card
+    const cardNumber = `ST-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const idCard = new IDCard({
+      roleType: 'staff',
+      staffId: staff._id,
+      cardNumber,
+      name: staff.name,
+      email: staff.email,
+      mobile: staff.mobile,
+      profileImage: staff.profileImage,
+      staffInfo: {
+        designation: staff.designation || 'N/A',
+        department: staff.department || 'N/A',
+        qualification: staff.qualification || 'N/A',
+        experience: staff.experience || 'N/A'
+      },
+      issueDate: new Date(),
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year validity
+      status: 'active',
+      client: branchAdmin.client,
+      branch: branchAdmin.branch._id
+    });
+    await idCard.save();
     const staffAdmin = new Admin({
       email,
       password,
@@ -66,13 +96,13 @@ exports.createStaff = async (req, res) => {
       client: branchAdmin.client,
       branch: branchAdmin.branch._id,
       staff: staff._id,
-      allowedPanels: [],
+      allowedPanels: ['staff'],  // ✅ SINGLE PANEL
       status: true
     });
     await staffAdmin.save();
 
     res.status(201).json({
-      message: 'Staff and Staff Admin created successfully',
+      message: 'Staff, Staff Admin, and ID Card created successfully',
       staff: {
         id: staff._id,
         name: staff.name,
@@ -90,6 +120,13 @@ exports.createStaff = async (req, res) => {
         id: staffAdmin._id,
         email: staffAdmin.email,
         role: staffAdmin.role
+      },
+      idCard: {
+        id: idCard._id,
+        cardNumber: idCard.cardNumber,
+        issueDate: idCard.issueDate,
+        expiryDate: idCard.expiryDate,
+        status: idCard.status
       }
     });
   } catch (error) {
