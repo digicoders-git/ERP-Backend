@@ -22,5 +22,6 @@ router.put('/documents/status/:id', flexibleAuth, studentController.updateDocume
 router.put('/documents/:id', flexibleAuth, setStudentHeaders, uploadFields, cloudinaryUpload, studentController.uploadDocuments);
 router.get('/documents', flexibleAuth, studentController.getAllDocuments);
 router.get('/get-students-by-section', flexibleAuth, studentController.getStudentsBySection);
+router.get('/search-active', flexibleAuth, studentController.searchActiveStudents);
 
 module.exports = router;

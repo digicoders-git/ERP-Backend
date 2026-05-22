@@ -60,6 +60,14 @@ const studentSchema = new mongoose.Schema({
     enum: ['general', 'obc', 'sc', 'st', 'ews'],
     required: true
   },
+  religion: {
+    type: String,
+    trim: true
+  },
+  aadhaarNumber: {
+    type: String,
+    trim: true
+  },
   profileImage: {
     type: String
   },

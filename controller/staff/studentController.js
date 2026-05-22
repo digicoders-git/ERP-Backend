@@ -172,7 +172,7 @@ exports.getAllApplications = async (req, res) => {
 
     const [applications, total] = await Promise.all([
       Student.find(query)
-        .select('firstName lastName fatherName mobile email class applicationStatus admissionStatus createdAt')
+        .select('firstName lastName fatherName mobile email class applicationStatus admissionStatus admissionNumber createdAt')
         .populate('class', 'className')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -261,7 +261,7 @@ exports.getVerificationList = async (req, res) => {
 
     const [students, total] = await Promise.all([
       Student.find(query)
-        .select('firstName lastName fatherName mobile email documents applicationStatus verificationStatus createdAt')
+        .select('firstName lastName fatherName mobile email documents applicationStatus verificationStatus admissionNumber createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -399,7 +399,7 @@ exports.getEnrollmentList = async (req, res) => {
 
     const [students, total] = await Promise.all([
       Student.find(query)
-        .select('firstName lastName fatherName mobile email class section applicationStatus admissionStatus createdAt')
+        .select('firstName lastName fatherName mobile email class section applicationStatus admissionStatus admissionNumber createdAt')
         .populate('class', 'className')
         .populate('section', 'sectionName')
         .sort({ createdAt: -1 })
@@ -521,5 +521,36 @@ exports.updateDocumentStatus = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Status sync failure', error: error.message });
+  }
+};
+
+// Search active/enrolled students for dropdowns
+exports.searchActiveStudents = async (req, res) => {
+  try {
+    const { search = '' } = req.query;
+    const { branch } = await getBranchClient(req.userId);
+
+    const query = {
+      branch,
+      status: 'active',
+      applicationStatus: 'enrolled'
+    };
+
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { admissionNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const students = await Student.find(query)
+      .select('firstName lastName admissionNumber')
+      .limit(50)
+      .lean();
+
+    res.status(200).json({ success: true, students });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

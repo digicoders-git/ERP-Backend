@@ -6,6 +6,7 @@ const { uploadWarden, setWardenHeaders, cloudinaryUpload } = require('../middlew
 
 router.post('/create', auth, setWardenHeaders, uploadWarden.single('profileImage'), cloudinaryUpload, wardenController.createWarden);
 router.get('/all', auth, wardenController.getAllWardens);
+router.get('/by-hostel/:hostelId', auth, wardenController.getWardensByHostel);
 router.get('/:id', auth, wardenController.getWardenById);
 router.put('/update/:id', auth, setWardenHeaders, uploadWarden.single('profileImage'), cloudinaryUpload, wardenController.updateWarden);
 router.delete('/delete/:id', auth, wardenController.deleteWarden);

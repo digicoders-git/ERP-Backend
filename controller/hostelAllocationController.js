@@ -1,11 +1,12 @@
 const HostelAllocation = require('../model/HostelAllocation');
 const Hostel = require('../model/Hostel');
 const Admin = require('../model/Admin');
+const Student = require('../model/Student');
 
 // Allocate Hostel
 exports.allocateHostel = async (req, res) => {
   try {
-    const { studentId, studentName, hostelId, roomNo, joiningDate, monthlyRent, securityDeposit, remark } = req.body;
+    const { studentId, hostelId, roomNo, joiningDate, monthlyRent, securityDeposit, remark } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -22,15 +23,31 @@ exports.allocateHostel = async (req, res) => {
       return res.status(403).json({ message: 'Hostel does not belong to your branch' });
     }
 
+    // Validate student existence in institutional database
+    const mongoose = require('mongoose');
+    const student = await Student.findOne({
+      $or: [
+        { admissionNumber: studentId },
+        { _id: mongoose.Types.ObjectId.isValid(studentId) ? studentId : null }
+      ],
+      branch: admin.branch
+    });
+
+    if (!student) {
+      return res.status(400).json({ message: 'Student not found in institutional database.' });
+    }
+
+    const correctStudentName = `${student.firstName} ${student.lastName}`;
+
     // Check: student ka already active allocation hai?
-    const existingAllocation = await HostelAllocation.findOne({ studentId, allocationStatus: 'allocated' });
+    const existingAllocation = await HostelAllocation.findOne({ studentId: student.admissionNumber, allocationStatus: 'allocated' });
     if (existingAllocation) {
-      return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo} in this hostel` });
+      return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo}` });
     }
 
     const newAllocation = new HostelAllocation({
-      studentId,
-      studentName,
+      studentId: student.admissionNumber,
+      studentName: correctStudentName,
       hostel: hostelId,
       roomNo,
       joiningDate,
@@ -116,6 +133,39 @@ exports.getAllAllocations = async (req, res) => {
   }
 };
 
+// Get Allocations By Hostel
+exports.getAllocationsByHostel = async (req, res) => {
+  try {
+    const { hostelId } = req.params;
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    const hostel = await Hostel.findById(hostelId);
+    if (!hostel) {
+      return res.status(404).json({ message: 'Hostel not found' });
+    }
+
+    if (admin.role === 'branchAdmin' && hostel.branch.toString() !== admin.branch.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const allocations = await HostelAllocation.find({ hostel: hostelId, allocationStatus: 'allocated' })
+      .select('studentName roomNo joiningDate allocationStatus monthlyRent securityDeposit')
+      .sort({ roomNo: 1 });
+
+    res.status(200).json({ 
+      success: true,
+      allocations
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // Get Allocation By ID
 exports.getAllocationById = async (req, res) => {
   try {
@@ -155,7 +205,7 @@ exports.getAllocationById = async (req, res) => {
 exports.updateAllocation = async (req, res) => {
   try {
     const { id } = req.params;
-    const { studentId, studentName, hostelId, roomNo, joiningDate, monthlyRent, securityDeposit, remark } = req.body;
+    const { studentId, hostelId, roomNo, joiningDate, monthlyRent, securityDeposit, remark } = req.body;
     const adminId = req.userId;
 
     const admin = await Admin.findById(adminId);
@@ -187,18 +237,34 @@ exports.updateAllocation = async (req, res) => {
       allocation.hostel = hostelId;
     }
 
-    if (studentId) allocation.studentId = studentId;
-    if (studentName) allocation.studentName = studentName;
-    if (roomNo) allocation.roomNo = roomNo;
-
-    // Agar studentId change ho raha hai to check karo naya student already allocated to nahi
     if (studentId && studentId !== allocation.studentId) {
-      const existingAllocation = await HostelAllocation.findOne({ studentId, allocationStatus: 'allocated', _id: { $ne: id } });
+      const mongoose = require('mongoose');
+      const student = await Student.findOne({
+        $or: [
+          { admissionNumber: studentId },
+          { _id: mongoose.Types.ObjectId.isValid(studentId) ? studentId : null }
+        ],
+        branch: admin.branch
+      });
+
+      if (!student) {
+        return res.status(400).json({ message: 'Student not found in institutional database.' });
+      }
+
+      const existingAllocation = await HostelAllocation.findOne({
+        studentId: student.admissionNumber,
+        allocationStatus: 'allocated',
+        _id: { $ne: id }
+      });
       if (existingAllocation) {
         return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo}` });
       }
+
+      allocation.studentId = student.admissionNumber;
+      allocation.studentName = `${student.firstName} ${student.lastName}`;
     }
 
+    if (roomNo) allocation.roomNo = roomNo;
     if (joiningDate) allocation.joiningDate = joiningDate;
     if (monthlyRent !== undefined) allocation.monthlyRent = monthlyRent;
     if (securityDeposit !== undefined) allocation.securityDeposit = securityDeposit;
@@ -239,6 +305,42 @@ exports.cancelAllocation = async (req, res) => {
     await allocation.save();
 
     res.status(200).json({ message: 'Allocation cancelled successfully', allocation });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Get Allocated Students (for dropdown)
+exports.getAllocatedStudents = async (req, res) => {
+  try {
+    const { search = '' } = req.query;
+    const adminId = req.userId;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    const searchQuery = { allocationStatus: 'allocated' };
+    if (admin.role === 'branchAdmin' || admin.role === 'staffAdmin') {
+      searchQuery.branch = admin.branch;
+    } else if (admin.role === 'clientAdmin') {
+      searchQuery.client = admin.client;
+    }
+
+    if (search) {
+      searchQuery.$or = [
+        { studentName: { $regex: search, $options: 'i' } },
+        { studentId: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const allocations = await HostelAllocation.find(searchQuery)
+      .select('studentId studentName')
+      .sort({ studentName: 1 })
+      .limit(50);
+
+    res.status(200).json({ data: allocations });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

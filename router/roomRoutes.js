@@ -5,6 +5,7 @@ const auth = require('../middleware/flexibleAuth');
 
 router.post('/create', auth, roomController.createRoom);
 router.get('/all', auth, roomController.getAllRooms);
+router.get('/by-hostel/:hostelId', auth, roomController.getRoomsByHostel);
 router.get('/:id', auth, roomController.getRoomById);
 router.put('/update/:id', auth, roomController.updateRoom);
 router.delete('/delete/:id', auth, roomController.deleteRoom);

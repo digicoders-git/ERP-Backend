@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const Staff = require('../../model/Staff');
+const Admin = require('../../model/Admin');
 const staffAuth = require('../../middleware/staffAuth');
 
-// Staff Login
+// Staff Login (with Branch Admin Fallback)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -15,57 +17,94 @@ router.post('/login', async (req, res) => {
 
     console.log('=== LOGIN ATTEMPT ===');
     console.log('Email:', email);
-    console.log('Password:', password);
 
-    const staff = await Staff.findOne({ email, status: true })
+    // 1. Try finding in Staff model first
+    let staff = await Staff.findOne({ email, status: true })
       .select('_id name email password branch client designation')
       .lean();
 
-    console.log('Staff found:', !!staff);
+    let isBranchAdmin = false;
+    let admin = null;
 
     if (!staff) {
-      console.log('Staff not found with email:', email);
-      return res.status(401).json({ message: 'Invalid credentials' });
+      console.log('Staff not found, searching in Admin model for branchAdmin fallback');
+      
+      // 2. Fallback to Admin model for role branchAdmin
+      admin = await Admin.findOne({ email, role: 'branchAdmin', status: true })
+        .select('_id name email password branch client')
+        .lean();
+
+      if (!admin) {
+        console.log('User not found in either Staff or Admin models');
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      // Admin passwords are hashed with bcrypt
+      const isPasswordMatch = await bcrypt.compare(password, admin.password);
+      console.log('Admin password match:', isPasswordMatch);
+
+      if (!isPasswordMatch) {
+        console.log('Admin password mismatch');
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      isBranchAdmin = true;
+    } else {
+      console.log('Staff found in DB');
+      // Staff passwords are plain text (or direct match)
+      if (password !== staff.password) {
+        console.log('Staff password mismatch');
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
     }
 
-    console.log('Staff password from DB:', staff.password);
-    console.log('Password match:', password === staff.password);
-
-    // Direct password comparison (database has plain text)
-    if (password !== staff.password) {
-      console.log('Password mismatch');
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    console.log('Password matched, generating token');
+    console.log('Authentication successful, generating token...');
 
     // Generate JWT token
+    const tokenPayload = isBranchAdmin ? {
+      _id: admin._id,
+      email: admin.email,
+      role: 'branchAdmin',
+      branch: admin.branch,
+      client: admin.client
+    } : {
+      _id: staff._id,
+      email: staff.email,
+      role: 'staff',
+      branch: staff.branch,
+      client: staff.client
+    };
+
     const token = jwt.sign(
-      {
-        _id: staff._id,
-        email: staff.email,
-        role: 'staff',
-        branch: staff.branch,
-        client: staff.client
-      },
+      tokenPayload,
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '7d' }
     );
 
-    console.log('Token generated successfully');
+    console.log('Token generated successfully for role:', tokenPayload.role);
+
+    const userResponse = isBranchAdmin ? {
+      _id: admin._id,
+      name: admin.name || 'Branch Admin',
+      email: admin.email,
+      branch: admin.branch,
+      client: admin.client,
+      designation: 'Branch Admin',
+      role: 'branchAdmin'
+    } : {
+      _id: staff._id,
+      name: staff.name,
+      email: staff.email,
+      branch: staff.branch,
+      client: staff.client,
+      designation: staff.designation,
+      role: 'staff'
+    };
 
     res.status(200).json({
       success: true,
       token,
-      staff: {
-        _id: staff._id,
-        name: staff.name,
-        email: staff.email,
-        branch: staff.branch,
-        client: staff.client,
-        designation: staff.designation,
-        role: 'staff'
-      }
+      staff: userResponse
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -73,15 +112,38 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Get current staff profile
+// Get current staff profile (with Branch Admin Fallback)
 router.get('/profile', staffAuth, async (req, res) => {
   try {
-    const staff = await Staff.findById(req.userId)
+    let staff = await Staff.findById(req.userId)
       .select('_id name email mobile designation department branch client profileImage')
       .lean();
 
     if (!staff) {
-      return res.status(404).json({ message: 'Staff not found' });
+      console.log('Profile lookup failed for Staff ID, checking Admin model fallback:', req.userId);
+      
+      const admin = await Admin.findById(req.userId)
+        .select('_id name email mobile branch client profileImage role')
+        .lean();
+
+      if (admin && admin.role === 'branchAdmin') {
+        staff = {
+          _id: admin._id,
+          name: admin.name || 'Branch Admin',
+          email: admin.email,
+          mobile: admin.mobile || '',
+          designation: 'Branch Admin',
+          department: 'Administration',
+          branch: admin.branch,
+          client: admin.client,
+          profileImage: admin.profileImage,
+          role: 'branchAdmin'
+        };
+      }
+    }
+
+    if (!staff) {
+      return res.status(404).json({ message: 'Staff member not found' });
     }
 
     res.status(200).json({ success: true, data: staff });

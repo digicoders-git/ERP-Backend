@@ -8,7 +8,7 @@ const StudentDocument = require('../../model/StudentDocument');
 exports.addAdmission = async (req, res) => {
   try {
     const {
-      firstName, lastName, email, phone, gender, dob, category,
+      firstName, lastName, email, phone, gender, dob, category, religion, aadhaarNumber,
       permanentAddress, permanentCity, permanentState, permanentPincode,
       currentAddress, currentCity, currentState, currentPincode,
       hasPreviousEducation, prevCourseName, prevSchoolName, prevSchoolAddress,
@@ -67,6 +67,8 @@ exports.addAdmission = async (req, res) => {
       gender,
       dob,
       category,
+      religion,
+      aadhaarNumber,
       fatherName,
       motherName,
       profileImage: getFilePath('studentPhoto'),
@@ -268,7 +270,10 @@ exports.getAdmissionById = async (req, res) => {
       return res.status(404).json({ message: 'Staff not found' });
     }
 
-    const student = await Student.findById(id)
+    const mongoose = require('mongoose');
+    const query = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { admissionNumber: id };
+
+    const student = await Student.findOne(query)
       .populate('class', 'className classCode classCapacity')
       .populate('section', 'sectionName capacity')
       .populate('branch', 'branchName branchCode')
@@ -299,6 +304,8 @@ exports.getAdmissionById = async (req, res) => {
       dobFormatted: student.dob ? new Date(student.dob).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' }) : null,
       bloodGroup: student.bloodGroup,
       category: student.category,
+      religion: student.religion,
+      aadhaarNumber: student.aadhaarNumber,
       profileImage: student.profileImage,
       
       // Academic Information
@@ -365,7 +372,10 @@ exports.updateAdmission = async (req, res) => {
 
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
 
-    let student = await Student.findById(id);
+    const mongoose = require('mongoose');
+    const query = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { admissionNumber: id };
+
+    let student = await Student.findOne(query);
     if (!student) return res.status(404).json({ message: 'Manifest not found' });
 
     if (student.branch.toString() !== staff.branch.toString()) {
@@ -493,7 +503,7 @@ exports.updateAdmission = async (req, res) => {
       updateData.verificationRemarks = 'All essential documents uploaded.';
     }
 
-    const updatedStudent = await Student.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+    const updatedStudent = await Student.findByIdAndUpdate(student._id, { $set: updateData }, { new: true });
     res.status(200).json({ message: 'Manifest Updated Successfully', student: updatedStudent });
   } catch (error) {
     res.status(500).json({ message: 'Update Fault: Internal Server Protocol Error', error: error.message });

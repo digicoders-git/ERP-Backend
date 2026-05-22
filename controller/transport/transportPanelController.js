@@ -32,7 +32,7 @@ exports.getDashboard = async (req, res) => {
           }
         }
       ]),
-      TransportAllocation.find(matchQ).select('studentId routeId status').limit(5).lean()
+      TransportAllocation.find(matchQ).select('userName route status').limit(5).lean()
     ]);
 
     res.status(200).json({
@@ -70,7 +70,7 @@ exports.getStats = async (req, res) => {
           total: [{ $count: 'count' }],
           active: [{ $match: { status: true } }, { $count: 'count' }],
           maintenance: [{ $match: { status: false } }, { $count: 'count' }],
-          totalCapacity: [{ $group: { _id: null, total: { $sum: '$capacity' } } }]
+          totalCapacity: [{ $group: { _id: null, total: { $sum: '$vehicleCapacity' } } }]
         }
       }
     ]);
@@ -126,7 +126,7 @@ exports.getVehicles = async (req, res) => {
 
     const [vehicles, total] = await Promise.all([
       Vehicle.find(query)
-        .select('vehicleNumber registrationNumber capacity status createdAt')
+        .select('vehicleNo rcNo vehicleCapacity vehicleType status createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -136,7 +136,13 @@ exports.getVehicles = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: vehicles,
+      data: vehicles.map(v => ({
+        vehicleNumber: v.vehicleNo,
+        registrationNumber: v.rcNo,
+        capacity: v.vehicleCapacity,
+        type: v.vehicleType,
+        status: v.status
+      })),
       pagination: {
         total,
         page: parseInt(page),
@@ -176,7 +182,7 @@ exports.getDrivers = async (req, res) => {
 
     const [drivers, total] = await Promise.all([
       Driver.find(q)
-        .select('name email mobile licenseNumber status createdAt')
+        .select('name email mobileNo licenseNo status createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -186,7 +192,13 @@ exports.getDrivers = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: drivers,
+      data: drivers.map(d => ({
+        name: d.name,
+        email: d.email,
+        mobile: d.mobileNo,
+        licenseNumber: d.licenseNo,
+        status: d.status
+      })),
       pagination: {
         total,
         page: parseInt(page),
@@ -225,46 +237,24 @@ exports.getRoutes = async (req, res) => {
     const matchQ = adminBranch ? { branch: adminBranch } : adminClient ? { client: adminClient } : {};
 
     const [routes, total] = await Promise.all([
-      Route.aggregate([
-        { $match: matchQ },
-        {
-          $lookup: {
-            from: 'vehicles',
-            localField: 'vehicleId',
-            foreignField: '_id',
-            as: 'vehicleDetails'
-          }
-        },
-        {
-          $lookup: {
-            from: 'drivers',
-            localField: 'driverId',
-            foreignField: '_id',
-            as: 'driverDetails'
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            routeName: 1,
-            startPoint: 1,
-            endPoint: 1,
-            vehicleNumber: { $arrayElemAt: ['$vehicleDetails.vehicleNumber', 0] },
-            driverName: { $arrayElemAt: ['$driverDetails.name', 0] },
-            stops: { $size: '$stops' },
-            createdAt: 1
-          }
-        },
-        { $sort: { createdAt: -1 } },
-        { $skip: skip },
-        { $limit: parseInt(limit) }
-      ]),
+      Route.find(matchQ)
+        .select('routeName startPoint endPoint totalDistance status createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
       Route.countDocuments(matchQ)
     ]);
 
     res.status(200).json({
       success: true,
-      data: routes,
+      data: routes.map(r => ({
+        routeName: r.routeName,
+        startPoint: r.startPoint,
+        endPoint: r.endPoint,
+        distance: r.totalDistance,
+        status: r.status
+      })),
       pagination: {
         total,
         page: parseInt(page),
@@ -281,9 +271,7 @@ exports.getRoutes = async (req, res) => {
 exports.getRouteById = async (req, res) => {
   try {
     const { id } = req.params;
-    const route = await Route.findById(id)
-      .populate('vehicleId')
-      .populate('driverId');
+    const route = await Route.findById(id);
 
     if (!route) {
       return res.status(404).json({ success: false, message: 'Route not found' });
@@ -316,45 +304,33 @@ exports.getAllocations = async (req, res) => {
     const adminClient = req.user.client ? new mongoose.Types.ObjectId(req.user.client) : null;
     const matchQ = adminBranch ? { branch: adminBranch } : adminClient ? { client: adminClient } : {};
 
-    const [allocations, total] = await Promise.all([
-      TransportAllocation.aggregate([
-        { $match: matchQ },
-        {
-          $lookup: {
-            from: 'students',
-            localField: 'studentId',
-            foreignField: '_id',
-            as: 'studentDetails'
-          }
-        },
-        {
-          $lookup: {
-            from: 'routes',
-            localField: 'routeId',
-            foreignField: '_id',
-            as: 'routeDetails'
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            studentName: { $arrayElemAt: ['$studentDetails.firstName', 0] },
-            studentEmail: { $arrayElemAt: ['$studentDetails.email', 0] },
-            routeName: { $arrayElemAt: ['$routeDetails.routeName', 0] },
-            status: 1,
-            createdAt: 1
-          }
-        },
-        { $sort: { createdAt: -1 } },
-        { $skip: skip },
-        { $limit: parseInt(limit) }
-      ]),
-      TransportAllocation.countDocuments(matchQ)
-    ]);
+    // Get allocations with route population
+    const allocations = await TransportAllocation.find(matchQ)
+      .populate('route', 'routeName')
+      .select('userName userType route status service monthlyCharges createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    const total = await TransportAllocation.countDocuments(matchQ);
+
+    // Map data properly
+    const mappedData = allocations.map(a => ({
+      studentName: a.userName || 'N/A',
+      studentEmail: 'N/A',
+      routeName: a.route?.routeName || 'N/A',
+      userType: a.userType || 'N/A',
+      service: a.service || 'N/A',
+      charges: a.monthlyCharges || 0,
+      status: a.status
+    }));
+
+    console.log('Allocations response:', mappedData);
 
     res.status(200).json({
       success: true,
-      data: allocations,
+      data: mappedData,
       pagination: {
         total,
         page: parseInt(page),
@@ -363,6 +339,7 @@ exports.getAllocations = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Allocations error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -372,8 +349,7 @@ exports.getAllocationById = async (req, res) => {
   try {
     const { id } = req.params;
     const allocation = await TransportAllocation.findById(id)
-      .populate('studentId')
-      .populate('routeId');
+      .populate('route');
 
     if (!allocation) {
       return res.status(404).json({ success: false, message: 'Allocation not found' });

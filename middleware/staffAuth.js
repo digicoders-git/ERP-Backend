@@ -18,6 +18,42 @@ const staffAuthMiddleware = async (req, res, next) => {
     let staffId = decoded._id;
     let staff = null;
 
+    // If token has role 'branchAdmin', search in Admin model
+    if (decoded.role === 'branchAdmin') {
+      console.log('Token is branchAdmin role, searching in Admin model');
+      const admin = await Admin.findById(decoded._id)
+        .select('_id email role branch client status name');
+      
+      if (!admin) {
+        console.log('Admin not found:', decoded._id);
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      if (admin.role !== 'branchAdmin') {
+        console.log('Not a branch admin:', decoded._id);
+        return res.status(403).json({ message: 'Access denied. Only branch admins can access this panel.' });
+      }
+
+      if (!admin.status) {
+        console.log('Admin is inactive:', decoded._id);
+        return res.status(403).json({ message: 'Account is inactive' });
+      }
+
+      req.userId = admin._id;
+      req.user = {
+        _id: admin._id,
+        userId: admin._id,
+        adminId: admin._id,
+        email: admin.email,
+        name: admin.name || 'Branch Admin',
+        role: 'branchAdmin',
+        branch: admin.branch,
+        client: admin.client
+      };
+      
+      return next();
+    }
+
     // If token has role 'staff', search directly in Staff model
     if (decoded.role === 'staff') {
       console.log('Token is staff role, searching in Staff model');

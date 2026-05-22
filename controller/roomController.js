@@ -109,6 +109,39 @@ exports.getAllRooms = async (req, res) => {
   }
 };
 
+// Get Rooms By Hostel
+exports.getRoomsByHostel = async (req, res) => {
+  try {
+    const { hostelId } = req.params;
+    const user = req.user;
+
+    if (!user) {
+      return res.status(404).json({ message: 'User context not found' });
+    }
+
+    const hostel = await Hostel.findById(hostelId);
+    if (!hostel) {
+      return res.status(404).json({ message: 'Hostel not found' });
+    }
+
+    if (user.role === 'branchAdmin' && hostel.branch.toString() !== user.branch.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const rooms = await Room.find({ hostel: hostelId })
+      .populate('hostel', 'hostelName hostelCode')
+      .populate('roomType', 'roomTypeName')
+      .sort({ floorNo: 1, roomNo: 1 });
+
+    res.status(200).json({ 
+      success: true,
+      rooms
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // Get Room By ID
 exports.getRoomById = async (req, res) => {
   try {

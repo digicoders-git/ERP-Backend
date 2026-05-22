@@ -5,6 +5,7 @@ const HostelAllocation = require('../../model/HostelAllocation');
 const Warden = require('../../model/Warden');
 const Admin = require('../../model/Admin');
 const Staff = require('../../model/Staff');
+const Student = require('../../model/Student');
 
 const getBranchClient = async (userId) => {
   let user = await Admin.findById(userId).select('branch client').lean();
@@ -130,7 +131,14 @@ exports.createRoom = async (req, res) => {
   try {
     const { branch, client } = await getBranchClient(req.userId);
     const { hostel, floorNo, roomNo, roomType, capacity, monthlyRent } = req.body;
-    const room = await Room.create({ hostel, floorNo, roomNo, roomType, capacity, monthlyRent, branch, client, createdBy: req.userId });
+
+    // Check if room number already exists on this floor in the selected hostel
+    const existingRoom = await Room.findOne({ hostel, floorNo, roomNo: roomNo.trim(), branch });
+    if (existingRoom) {
+      return res.status(400).json({ message: `Room number ${roomNo} already exists on Floor ${floorNo} in this hostel.` });
+    }
+
+    const room = await Room.create({ hostel, floorNo, roomNo: roomNo.trim(), roomType, capacity, monthlyRent, branch, client, createdBy: req.userId });
     res.status(201).json({ message: 'Room created successfully', room });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -140,6 +148,31 @@ exports.createRoom = async (req, res) => {
 exports.updateRoom = async (req, res) => {
   try {
     const { branch } = await getBranchClient(req.userId);
+    const { hostel, floorNo, roomNo } = req.body;
+
+    if (roomNo !== undefined || floorNo !== undefined || hostel !== undefined) {
+      // Find the current room to know its existing details
+      const currentRoom = await Room.findOne({ _id: req.params.id, branch }).lean();
+      if (!currentRoom) return res.status(404).json({ message: 'Room not found' });
+
+      const checkHostel = hostel || currentRoom.hostel;
+      const checkFloor = floorNo !== undefined ? floorNo : currentRoom.floorNo;
+      const checkRoomNo = roomNo !== undefined ? roomNo.trim() : currentRoom.roomNo;
+
+      // Check if there is another room with the same number on the same floor/hostel
+      const existingDuplicate = await Room.findOne({
+        _id: { $ne: req.params.id },
+        hostel: checkHostel,
+        floorNo: checkFloor,
+        roomNo: checkRoomNo,
+        branch
+      });
+
+      if (existingDuplicate) {
+        return res.status(400).json({ message: `Room number ${checkRoomNo} already exists on Floor ${checkFloor} in this hostel.` });
+      }
+    }
+
     const room = await Room.findOneAndUpdate({ _id: req.params.id, branch }, req.body, { new: true }).lean();
     if (!room) return res.status(404).json({ message: 'Room not found' });
     res.status(200).json({ message: 'Room updated successfully', room });
@@ -179,8 +212,46 @@ exports.getAllAllocations = async (req, res) => {
 exports.createAllocation = async (req, res) => {
   try {
     const { branch, client } = await getBranchClient(req.userId);
-    const { studentId, studentName, hostel, roomNo, joiningDate, monthlyRent, securityDeposit, remark } = req.body;
-    const allocation = await HostelAllocation.create({ studentId, studentName, hostel, roomNo, joiningDate, monthlyRent, securityDeposit, remark, branch, client, createdBy: req.userId });
+    const { studentId, hostel, roomNo, joiningDate, monthlyRent, securityDeposit, remark } = req.body;
+
+    // Validate student existence in institutional database
+    const mongoose = require('mongoose');
+    const student = await Student.findOne({
+      $or: [
+        { admissionNumber: studentId },
+        { _id: mongoose.Types.ObjectId.isValid(studentId) ? studentId : null }
+      ],
+      branch
+    });
+
+    if (!student) {
+      return res.status(400).json({ message: 'Student not found in institutional database.' });
+    }
+
+    const correctStudentName = `${student.firstName} ${student.lastName}`;
+
+    // Verify if student already has an active allocation
+    const existingAllocation = await HostelAllocation.findOne({
+      studentId: student.admissionNumber,
+      allocationStatus: 'allocated'
+    });
+    if (existingAllocation) {
+      return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo}` });
+    }
+
+    const allocation = await HostelAllocation.create({
+      studentId: student.admissionNumber,
+      studentName: correctStudentName,
+      hostel,
+      roomNo,
+      joiningDate,
+      monthlyRent,
+      securityDeposit,
+      remark,
+      branch,
+      client,
+      createdBy: req.userId
+    });
     res.status(201).json({ message: 'Allocation created successfully', allocation });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -190,9 +261,58 @@ exports.createAllocation = async (req, res) => {
 exports.updateAllocation = async (req, res) => {
   try {
     const { branch } = await getBranchClient(req.userId);
-    const allocation = await HostelAllocation.findOneAndUpdate({ _id: req.params.id, branch }, req.body, { new: true }).lean();
+    const { studentId, hostel, roomNo, monthlyRent, securityDeposit, remark, joiningDate } = req.body;
+
+    const allocation = await HostelAllocation.findOne({ _id: req.params.id, branch });
     if (!allocation) return res.status(404).json({ message: 'Allocation not found' });
-    res.status(200).json({ message: 'Allocation updated successfully', allocation });
+
+    if (allocation.allocationStatus === 'cancelled') {
+      return res.status(400).json({ message: 'Cannot update cancelled allocation' });
+    }
+
+    const updateFields = {};
+
+    if (studentId && studentId !== allocation.studentId) {
+      const mongoose = require('mongoose');
+      const student = await Student.findOne({
+        $or: [
+          { admissionNumber: studentId },
+          { _id: mongoose.Types.ObjectId.isValid(studentId) ? studentId : null }
+        ],
+        branch
+      });
+
+      if (!student) {
+        return res.status(400).json({ message: 'Student not found in institutional database.' });
+      }
+
+      const existingAllocation = await HostelAllocation.findOne({
+        studentId: student.admissionNumber,
+        allocationStatus: 'allocated',
+        _id: { $ne: req.params.id }
+      });
+      if (existingAllocation) {
+        return res.status(400).json({ message: `Student is already allocated to room ${existingAllocation.roomNo}` });
+      }
+
+      updateFields.studentId = student.admissionNumber;
+      updateFields.studentName = `${student.firstName} ${student.lastName}`;
+    }
+
+    if (hostel) updateFields.hostel = hostel;
+    if (roomNo) updateFields.roomNo = roomNo;
+    if (joiningDate) updateFields.joiningDate = joiningDate;
+    if (monthlyRent !== undefined) updateFields.monthlyRent = monthlyRent;
+    if (securityDeposit !== undefined) updateFields.securityDeposit = securityDeposit;
+    if (remark !== undefined) updateFields.remark = remark;
+
+    const updatedAllocation = await HostelAllocation.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateFields },
+      { new: true }
+    ).lean();
+
+    res.status(200).json({ message: 'Allocation updated successfully', allocation: updatedAllocation });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

@@ -66,6 +66,9 @@ exports.createStaff = async (req, res) => {
       createdBy: req.userId,
       status: true
     });
+    
+    await staff.save();
+
     // Generate ID Card
     const cardNumber = `ST-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const idCard = new IDCard({

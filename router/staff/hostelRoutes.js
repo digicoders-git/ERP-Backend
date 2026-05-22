@@ -11,6 +11,9 @@ router.delete('/hostels/:id', flexibleAuth, hostelController.deleteHostel);
 
 // Room Types Routes
 router.get('/room-types', flexibleAuth, hostelController.getAllRoomTypes);
+router.post('/room-types', flexibleAuth, hostelController.createRoomType);
+router.put('/room-types/:id', flexibleAuth, hostelController.updateRoomType);
+router.delete('/room-types/:id', flexibleAuth, hostelController.deleteRoomType);
 
 // Rooms Routes
 router.get('/rooms', flexibleAuth, hostelController.getAllRooms);

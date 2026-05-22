@@ -5,6 +5,8 @@ const auth = require('../middleware/auth');
 
 router.post('/allocate', auth, hostelAllocationController.allocateHostel);
 router.get('/all', auth, hostelAllocationController.getAllAllocations);
+router.get('/by-hostel/:hostelId', auth, hostelAllocationController.getAllocationsByHostel);
+router.get('/allocated-students', auth, hostelAllocationController.getAllocatedStudents);
 router.get('/:id', auth, hostelAllocationController.getAllocationById);
 router.put('/update/:id', auth, hostelAllocationController.updateAllocation);
 router.patch('/cancel/:id', auth, hostelAllocationController.cancelAllocation);
