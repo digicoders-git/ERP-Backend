@@ -18,63 +18,112 @@ router.post('/login', async (req, res) => {
     console.log('=== LOGIN ATTEMPT ===');
     console.log('Email:', email);
 
-    // 1. Try finding in Staff model first
-    let staff = await Staff.findOne({ email, status: true })
-      .select('_id name email password branch client designation')
-      .lean();
+    // 1. Check in Admin model first for both staffAdmin and branchAdmin roles
+    const admin = await Admin.findOne({ 
+      email, 
+      role: { $in: ['staffAdmin', 'branchAdmin'] }, 
+      status: true 
+    }).lean();
 
-    let isBranchAdmin = false;
-    let admin = null;
+    let tokenPayload = null;
+    let userResponse = null;
 
-    if (!staff) {
-      console.log('Staff not found, searching in Admin model for branchAdmin fallback');
-      
-      // 2. Fallback to Admin model for role branchAdmin
-      admin = await Admin.findOne({ email, role: 'branchAdmin', status: true })
-        .select('_id name email password branch client')
-        .lean();
-
-      if (!admin) {
-        console.log('User not found in either Staff or Admin models');
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
-
+    if (admin) {
+      console.log('User found in Admin model, verifying password...');
       // Admin passwords are hashed with bcrypt
       const isPasswordMatch = await bcrypt.compare(password, admin.password);
-      console.log('Admin password match:', isPasswordMatch);
-
       if (!isPasswordMatch) {
-        console.log('Admin password mismatch');
+        console.log('Password mismatch in Admin model');
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
-      isBranchAdmin = true;
+      if (admin.role === 'staffAdmin') {
+        console.log('Authenticated as staffAdmin, fetching staff details...');
+        const staff = await Staff.findById(admin.staff)
+          .select('_id name email password branch client designation')
+          .lean();
+        
+        if (!staff) {
+          console.log('Associated staff details not found');
+          return res.status(404).json({ message: 'Staff profile not found' });
+        }
+
+        tokenPayload = {
+          _id: staff._id,
+          email: staff.email,
+          role: 'staff',
+          branch: staff.branch,
+          client: staff.client
+        };
+
+        userResponse = {
+          _id: staff._id,
+          name: staff.name,
+          email: staff.email,
+          branch: staff.branch,
+          client: staff.client,
+          designation: staff.designation,
+          role: 'staff'
+        };
+      } else {
+        // branchAdmin
+        console.log('Authenticated as branchAdmin');
+        tokenPayload = {
+          _id: admin._id,
+          email: admin.email,
+          role: 'branchAdmin',
+          branch: admin.branch,
+          client: admin.client
+        };
+
+        userResponse = {
+          _id: admin._id,
+          name: admin.name || 'Branch Admin',
+          email: admin.email,
+          branch: admin.branch,
+          client: admin.client,
+          designation: 'Branch Admin',
+          role: 'branchAdmin'
+        };
+      }
     } else {
-      console.log('Staff found in DB');
-      // Staff passwords are plain text (or direct match)
+      console.log('User not found in Admin, falling back to Staff model');
+      // 2. Fallback to direct Staff model search
+      const staff = await Staff.findOne({ email, status: true })
+        .select('_id name email password branch client designation')
+        .lean();
+
+      if (!staff) {
+        console.log('User not found in Staff model either');
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      // Staff passwords in direct Staff model are plain text
       if (password !== staff.password) {
         console.log('Staff password mismatch');
         return res.status(401).json({ message: 'Invalid credentials' });
       }
+
+      tokenPayload = {
+        _id: staff._id,
+        email: staff.email,
+        role: 'staff',
+        branch: staff.branch,
+        client: staff.client
+      };
+
+      userResponse = {
+        _id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        branch: staff.branch,
+        client: staff.client,
+        designation: staff.designation,
+        role: 'staff'
+      };
     }
 
     console.log('Authentication successful, generating token...');
-
-    // Generate JWT token
-    const tokenPayload = isBranchAdmin ? {
-      _id: admin._id,
-      email: admin.email,
-      role: 'branchAdmin',
-      branch: admin.branch,
-      client: admin.client
-    } : {
-      _id: staff._id,
-      email: staff.email,
-      role: 'staff',
-      branch: staff.branch,
-      client: staff.client
-    };
-
     const token = jwt.sign(
       tokenPayload,
       process.env.JWT_SECRET || 'your-secret-key',
@@ -82,24 +131,6 @@ router.post('/login', async (req, res) => {
     );
 
     console.log('Token generated successfully for role:', tokenPayload.role);
-
-    const userResponse = isBranchAdmin ? {
-      _id: admin._id,
-      name: admin.name || 'Branch Admin',
-      email: admin.email,
-      branch: admin.branch,
-      client: admin.client,
-      designation: 'Branch Admin',
-      role: 'branchAdmin'
-    } : {
-      _id: staff._id,
-      name: staff.name,
-      email: staff.email,
-      branch: staff.branch,
-      client: staff.client,
-      designation: staff.designation,
-      role: 'staff'
-    };
 
     res.status(200).json({
       success: true,
