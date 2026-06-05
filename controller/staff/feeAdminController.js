@@ -26,7 +26,12 @@ exports.getAllFeeAdmins = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    res.status(200).json({ feeAdmins });
+    const mappedFeeAdmins = feeAdmins.map(admin => ({
+      ...admin,
+      status: admin.status ? 'active' : 'inactive'
+    }));
+
+    res.status(200).json({ feeAdmins: mappedFeeAdmins });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -44,6 +49,8 @@ exports.createFeeAdmin = async (req, res) => {
       return res.status(400).json({ message: 'Email already exists' });
     }
 
+    const isStatusActive = status === 'active' || status === true || status === undefined;
+
     const feeAdmin = new Admin({
       email,
       password,
@@ -51,7 +58,7 @@ exports.createFeeAdmin = async (req, res) => {
       name,
       mobile,
       employeeId,
-      status: status || 'active',
+      status: isStatusActive,
       branch,
       client,
       allowedPanels: ['fee'],
@@ -68,7 +75,7 @@ exports.createFeeAdmin = async (req, res) => {
         email: feeAdmin.email,
         mobile: feeAdmin.mobile,
         employeeId: feeAdmin.employeeId,
-        status: feeAdmin.status
+        status: feeAdmin.status ? 'active' : 'inactive'
       }
     });
   } catch (error) {
@@ -104,7 +111,9 @@ exports.updateFeeAdmin = async (req, res) => {
     if (name) feeAdmin.name = name;
     if (mobile) feeAdmin.mobile = mobile;
     if (employeeId) feeAdmin.employeeId = employeeId;
-    if (status) feeAdmin.status = status;
+    if (status !== undefined) {
+      feeAdmin.status = status === 'active' || status === true;
+    }
     if (password) feeAdmin.password = password;
 
     await feeAdmin.save();
@@ -117,7 +126,7 @@ exports.updateFeeAdmin = async (req, res) => {
         email: feeAdmin.email,
         mobile: feeAdmin.mobile,
         employeeId: feeAdmin.employeeId,
-        status: feeAdmin.status
+        status: feeAdmin.status ? 'active' : 'inactive'
       }
     });
   } catch (error) {
