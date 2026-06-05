@@ -79,16 +79,16 @@ exports.loginAdmin = async (req, res) => {
     if (admin.role === 'superAdmin') {
       // Super admin has access to all panels
       allowedPanels = ['school', 'staff', 'fee', 'warden', 'library', 'transport', 'teacher', 'parent', 'student'];
-    } else if (admin.client && admin.client.purchasedPanels && admin.client.purchasedPanels.length > 0) {
+    } else if (!admin.client) {
+      // No client assigned for non-superadmin
+      return res.status(403).json({ message: 'No organization assigned to this account.' });
+    } else if (admin.client.purchasedPanels && admin.client.purchasedPanels.length > 0) {
       // Client admin gets their purchased panels
       allowedPanels = admin.client.purchasedPanels;
-    } else if (admin.client) {
+    } else {
       // If client exists but no purchasedPanels, log warning and deny access
       console.warn('WARNING: Admin has client but no purchasedPanels assigned', { adminId: admin._id, clientId: admin.client._id });
       return res.status(403).json({ message: 'No panels assigned to this account. Contact administrator.' });
-    } else {
-      // No client assigned
-      return res.status(403).json({ message: 'No organization assigned to this account.' });
     }
 
     // Ensure branch admin has all purchasedPanels
