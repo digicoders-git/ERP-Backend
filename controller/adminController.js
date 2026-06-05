@@ -51,16 +51,19 @@ exports.loginAdmin = async (req, res) => {
       .populate('branch', 'branchName branchCode');
     
     if (!admin) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      console.error('Login failed: Admin not found', { email });
+      return res.status(401).json({ message: 'Invalid credentials', code: 'ADMIN_NOT_FOUND' });
     }
 
     if (!admin.status) {
-      return res.status(403).json({ message: 'Account is inactive' });
+      console.error('Login failed: Account inactive', { email, adminId: admin._id });
+      return res.status(403).json({ message: 'Account is inactive', code: 'ACCOUNT_INACTIVE' });
     }
 
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      console.error('Login failed: Invalid password', { email });
+      return res.status(401).json({ message: 'Invalid credentials', code: 'INVALID_PASSWORD' });
     }
 
     // If panel is specified, validate role matches
@@ -72,15 +75,21 @@ exports.loginAdmin = async (req, res) => {
 
     // Set allowedPanels based on client's purchasedPanels
     let allowedPanels = [];
-    console.log('DEBUG: admin.client =', admin.client);
     
-    if (admin.client && admin.client.purchasedPanels && admin.client.purchasedPanels.length > 0) {
-      allowedPanels = admin.client.purchasedPanels;
-    } else {
-      // Fallback: if no purchasedPanels, use all panels
+    if (admin.role === 'superAdmin') {
+      // Super admin has access to all panels
       allowedPanels = ['school', 'staff', 'fee', 'warden', 'library', 'transport', 'teacher', 'parent', 'student'];
+    } else if (admin.client && admin.client.purchasedPanels && admin.client.purchasedPanels.length > 0) {
+      // Client admin gets their purchased panels
+      allowedPanels = admin.client.purchasedPanels;
+    } else if (admin.client) {
+      // If client exists but no purchasedPanels, log warning and deny access
+      console.warn('WARNING: Admin has client but no purchasedPanels assigned', { adminId: admin._id, clientId: admin.client._id });
+      return res.status(403).json({ message: 'No panels assigned to this account. Contact administrator.' });
+    } else {
+      // No client assigned
+      return res.status(403).json({ message: 'No organization assigned to this account.' });
     }
-    console.log('DEBUG Login:', { clientId: admin.client?._id, purchasedPanels: admin.client?.purchasedPanels, allowedPanels });
 
     // Ensure branch admin has all purchasedPanels
     if (admin.role === 'branchAdmin') {
