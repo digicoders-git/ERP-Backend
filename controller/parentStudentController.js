@@ -28,15 +28,27 @@ exports.login = async (req, res) => {
 
     // ─── Student Login via Admission Number & DOB ──────────────────────────
     if (role === 'student' && admissionNumber && dob) {
-      const student = await Student.findOne({ admissionNumber }).lean();
+      const trimmedAdmissionNumber = admissionNumber.trim();
+      // Case-insensitive search for admission number
+      const student = await Student.findOne({
+        admissionNumber: { $regex: new RegExp(`^${trimmedAdmissionNumber}$`, 'i') }
+      }).lean();
       if (!student) return res.status(401).json({ message: 'Invalid Enrollment Number' });
 
-      // Verify DOB (Normalize both to YYYY-MM-DD for comparison)
-      const studentDob = new Date(student.dob).toISOString().split('T')[0];
-      const inputDob = new Date(dob).toISOString().split('T')[0];
+      // Verify DOB using timezone-safe comparison
+      // Store DOB as date string in YYYY-MM-DD format using UTC date parts
+      const dobDate = new Date(student.dob);
+      const studentDobStr = [
+        dobDate.getUTCFullYear(),
+        String(dobDate.getUTCMonth() + 1).padStart(2, '0'),
+        String(dobDate.getUTCDate()).padStart(2, '0')
+      ].join('-');
 
-      if (studentDob !== inputDob) {
-        return res.status(401).json({ message: 'Invalid Date of Birth' });
+      // Input dob from HTML date input is always YYYY-MM-DD string
+      const inputDobStr = dob.trim();
+
+      if (studentDobStr !== inputDobStr) {
+        return res.status(401).json({ message: 'Invalid Date of Birth', debug: { stored: studentDobStr, input: inputDobStr } });
       }
 
       // Find or Create ParentStudent record
