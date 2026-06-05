@@ -30,7 +30,10 @@ exports.loginAdmin = async (req, res) => {
   try {
     const { email, password, panel } = req.body;
 
+    console.log('[LOGIN] Starting login attempt:', { email, panel });
+
     if (!email || !password) {
+      console.log('[LOGIN] Missing credentials');
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
@@ -46,64 +49,72 @@ exports.loginAdmin = async (req, res) => {
       libraryAdmin: ['libraryAdmin'],
     };
 
+    console.log('[LOGIN] Searching for admin with email:', email);
     const admin = await Admin.findOne({ email })
-      .populate('client')
+      .populate('client', 'purchasedPanels')
       .populate('branch', 'branchName branchCode');
     
     if (!admin) {
-      console.error('Login failed: Admin not found', { email });
+      console.log('[LOGIN] Admin not found:', email);
       return res.status(401).json({ message: 'Invalid credentials', code: 'ADMIN_NOT_FOUND' });
     }
 
-    if (!admin.status) {
-      console.error('Login failed: Account inactive', { email, adminId: admin._id });
+    console.log('[LOGIN] Admin found:', { 
+      email: admin.email, 
+      role: admin.role, 
+      status: admin.status,
+      hasClient: !!admin.client 
+    });
+
+    if (admin.status === false) {
+      console.log('[LOGIN] Account inactive:', email);
       return res.status(403).json({ message: 'Account is inactive', code: 'ACCOUNT_INACTIVE' });
     }
 
+    console.log('[LOGIN] Comparing passwords for:', email);
     const isMatch = await admin.comparePassword(password);
+    console.log('[LOGIN] Password match result:', isMatch);
+    
     if (!isMatch) {
-      console.error('Login failed: Invalid password', { email });
+      console.log('[LOGIN] Invalid password for:', email);
       return res.status(401).json({ message: 'Invalid credentials', code: 'INVALID_PASSWORD' });
     }
 
     // If panel is specified, validate role matches
     if (panel && PANEL_ROLES[panel]) {
       if (!PANEL_ROLES[panel].includes(admin.role)) {
+        console.log('[LOGIN] Role mismatch - admin role:', admin.role, 'panel allowed:', PANEL_ROLES[panel]);
         return res.status(403).json({ message: 'Access denied. Invalid credentials for this panel.' });
       }
     }
+
+    console.log('[LOGIN] Role validation passed');
 
     // Set allowedPanels based on client's purchasedPanels
     let allowedPanels = [];
     
     if (admin.role === 'superAdmin') {
-      // Super admin has access to all panels
+      console.log('[LOGIN] SuperAdmin detected - assigning all panels');
       allowedPanels = ['school', 'staff', 'fee', 'warden', 'library', 'transport', 'teacher', 'parent', 'student'];
     } else if (!admin.client) {
-      // No client assigned for non-superadmin
+      console.log('[LOGIN] Non-superadmin without client - denying access');
       return res.status(403).json({ message: 'No organization assigned to this account.' });
     } else if (admin.client.purchasedPanels && admin.client.purchasedPanels.length > 0) {
-      // Client admin gets their purchased panels
+      console.log('[LOGIN] Client admin - assigning purchased panels:', admin.client.purchasedPanels);
       allowedPanels = admin.client.purchasedPanels;
     } else {
-      // If client exists but no purchasedPanels, log warning and deny access
-      console.warn('WARNING: Admin has client but no purchasedPanels assigned', { adminId: admin._id, clientId: admin.client._id });
+      console.log('[LOGIN] Client exists but no purchasedPanels assigned');
       return res.status(403).json({ message: 'No panels assigned to this account. Contact administrator.' });
     }
 
-    // Ensure branch admin has all purchasedPanels
-    if (admin.role === 'branchAdmin') {
-      admin.allowedPanels = allowedPanels;
-      await admin.save();
-    }
-
+    console.log('[LOGIN] Generating JWT token');
     const token = jwt.sign(
       { _id: admin._id, role: admin.role, email: admin.email, branch: admin.branch?._id, client: admin.client?._id, allowedPanels: allowedPanels },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.status(200).json({
+    const responseData = {
       success: true,
       message: 'Login successful',
       token,
@@ -119,9 +130,15 @@ exports.loginAdmin = async (req, res) => {
         client: admin.client,
         branch: admin.branch
       }
-    });
+    };
+
+    console.log('[LOGIN] Login successful for:', email);
+    console.log('[LOGIN] Response object created:', { success: true, role: admin.role, allowedPanels });
+    
+    return res.status(200).json(responseData);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('[LOGIN] Unexpected error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
