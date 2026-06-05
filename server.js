@@ -372,9 +372,11 @@ app.get('/api/debug-db-status', async (req, res) => {
   try {
     const Admin = require('./model/Admin');
     const Librarian = require('./model/Librarian');
+    const Student = require('./model/Student');
     const admins = await Admin.find({ role: 'libraryAdmin' }).select('-password').lean();
     const librarians = await Librarian.find().select('-password').lean();
-    res.json({ admins, librarians });
+    const students = await Student.find().select('firstName lastName admissionNumber dob phone').limit(10).lean();
+    res.json({ admins, librarians, students });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
