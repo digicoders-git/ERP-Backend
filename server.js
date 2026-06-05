@@ -368,6 +368,18 @@ app.get('/', (req, res) => {
   res.json({ message: 'ERP Backend Server Running' });
 });
 
+app.get('/api/debug-db-status', async (req, res) => {
+  try {
+    const Admin = require('./model/Admin');
+    const Librarian = require('./model/Librarian');
+    const admins = await Admin.find({ role: 'libraryAdmin' }).select('-password').lean();
+    const librarians = await Librarian.find().select('-password').lean();
+    res.json({ admins, librarians });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use((req, res) => {
   console.warn(`Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
